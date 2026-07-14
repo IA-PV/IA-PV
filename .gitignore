@@ -157,6 +157,11 @@ ENV/
 env.bak/
 venv.bak/
 
+# This source package is not a virtual environment.
+!src/tetris_ai/env/
+!src/tetris_ai/env/**
+src/tetris_ai/env/__pycache__/
+
 # Spyder project settings
 .spyderproject
 .spyproject
@@ -202,6 +207,9 @@ cython_debug/
 # .vscode/
 # Temporary file for partial code execution
 tempCodeRunnerFile.py
+
+# Generated evaluation artifacts (keep the directory through results/.gitkeep)
+results/*.csv
 
 # Ruff stuff:
 .ruff_cache/
