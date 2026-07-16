@@ -1,61 +1,85 @@
-# Arquitetura e migração — Fase 1
+# Arquitetura e migracao - Fase 1
 
 ## Antes e o que foi removido
 
-O ponto de partida possuía um jogo gráfico com um `Board` que representava células por cores e importava uma constante de interface. OpenGL, callbacks, menus, teclado, loop de FPS e queda por tempo foram descartados na migração. Nada disso é importado por este repositório. O antigo `core/board.py` foi substituído por um tabuleiro numérico independente.
+O ponto de partida possuia um jogo grafico com um `Board` que representava celulas por cores e importava uma constante de interface. OpenGL, callbacks, menus, teclado, loop de FPS e queda por tempo foram descartados na migracao. Nada disso e importado pelo nucleo. O antigo `core/board.py` foi substituido por um tabuleiro numerico independente.
 
 ## Nova arquitetura
 
 ```text
 src/tetris_ai/
-  core/        regras puras: tabuleiro, peças, 7-bag e métricas
+  core/        regras puras: tabuleiro, pecas, 7-bag e metricas
   env/         Action, Observation, recompensa e TetrisEnv
-  agents/      contrato de agente, RandomAgent e HeuristicAgent
-  evaluation/  execução de episódios
-  cli/         comando de comparação
+  agents/      contrato de agente, RandomAgent e StateGoalHeuristicAgent
+  evaluation/  execucao de episodios
+  visualization/ janela Tkinter para acompanhar agentes
+  cli/         comandos de avaliacao e visualizacao
 tests/         testes sem interface
-results/       saídas de avaliação (CSV ignorável pelo Git)
+results/       saidas de avaliacao (CSV ignoravel pelo Git)
 ```
 
-As dependências seguem `core → env → agents/evaluation → cli`: o núcleo não conhece o ambiente; o ambiente não conhece agentes; não há código de renderização nessa cadeia.
+As dependencias seguem `core -> env -> agents/evaluation -> cli`: o nucleo nao conhece agentes nem renderizacao; o ambiente continua reutilizavel para experimentos de IA.
 
 ## Ambiente por turnos
 
-`TetrisEnv.reset(seed)` cria um tabuleiro limpo, reinicia o 7-bag e retorna uma observação. `step(Action(rotation, column))` valida uma ação, faz hard drop, trava a peça, limpa linhas, atualiza score/recompensa e promove a próxima peça. `legal_actions()` contém apenas rotações e colunas que podem nascer e cair. `clone()` duplica tabuleiro, estado do 7-bag e contadores sem compartilhar estado.
+`TetrisEnv.reset(seed)` cria um tabuleiro limpo, reinicia o 7-bag e retorna uma observacao. `step(Action(rotation, column))` valida uma acao, faz hard drop, trava a peca, limpa linhas, atualiza score/recompensa e promove a proxima peca. `step(Action.hold())` guarda ou troca a peca atual sem travar bloco no tabuleiro. `clone()` duplica tabuleiro, 7-bag, hold, B2B e contadores sem compartilhar estado.
 
-## Ações e observações
+## Acoes e observacoes
 
-`Action` é um dataclass imutável com `rotation` e `column`. As peças têm todas as rotações únicas pré-calculadas (`O=1`, `I/S/Z=2`, demais=4). `Observation` também é imutável: expõe uma matriz de tuplas com `0`/`1`, peça atual/próxima, score, totais, fim e métricas. As métricas são alturas por coluna, altura agregada/máxima, buracos, bumpiness e linhas da última jogada.
+`Action` continua aceitando `rotation` e `column`, mas agora tambem possui `use_hold` e o construtor `Action.hold()`. `Observation` expoe matriz, peca atual, proxima peca, peca em hold, `can_hold`, score, level, linhas, pecas, B2B ativo, fim e metricas do tabuleiro.
 
-## Score e recompensa
+As metricas continuam sendo alturas por coluna, altura agregada/maxima, buracos, bumpiness e linhas da ultima jogada.
 
-Score do jogo é independente da recompensa: linhas 0–4 rendem respectivamente `0, 100, 300, 500, 800`. A recompensa usa linhas `0, 1, 3, 5, 8`, menos os deltas de buracos (`0.75`), altura agregada (`0.10`) e bumpiness (`0.15`), além de `-10` ao encerrar. O `info` de `step` contém cada termo da decomposição. O episódio acaba por `game_over` (a próxima peça não nasce) ou `piece_limit` (padrão: 500).
+## Score, level, T-Spin e B2B
 
-## Agentes e avaliação
+O level e derivado de linhas limpas: `total_lines_cleared // 10 + 1`. O score de linhas e multiplicado pelo level atual apos a limpeza. A deteccao de T-Spin ocorre ao travar uma peca `T` quando 3 dos 4 cantos diagonais ao centro da peca estao preenchidos ou fora do tabuleiro.
 
-`RandomAgent` escolhe uniformemente entre ações legais com RNG privado e seed opcional. `HeuristicAgent` testa cada ação em clone e maximiza `linhas - 0.5*altura_agregada - 4*buracos - 0.8*bumpiness`; como as ações são percorridas em ordem, empates são determinísticos.
+Back-to-Back ativa em Tetris de 4 linhas ou T-Spin com limpeza. Jogadas especiais consecutivas recebem multiplicador `1.5`; uma limpeza comum quebra a sequencia. O `info` de `step` inclui `score_gain`, `level`, `is_t_spin`, `back_to_back_active`, `back_to_back_bonus_applied` e `hold_used`.
 
-Após instalar o projeto, execute:
+A recompensa segue separada do score e continua voltada a avaliacao de episodio: linhas, deltas de buracos, altura agregada, bumpiness e penalidade terminal.
+
+## Agentes e avaliacao
+
+`RandomAgent` escolhe uniformemente entre acoes legais com RNG privado e seed opcional. Ele fica como baseline simples.
+
+`StateGoalHeuristicAgent` implementa o paradigma do enunciado: agente baseado em estado, objetivo e busca heuristica.
+
+- Estado: `AgentState` guarda ultima observacao, plano escolhido, decisoes tomadas, profundidade efetiva e nos expandidos.
+- Objetivo: `TetrisGoal` avalia somente metricas do tabuleiro, sem somar a recompensa do ambiente.
+- Busca: o agente usa beam search. Ele ranqueia todas as acoes imediatas, mas aprofunda apenas as melhores `beam_width`.
+- Dificuldade simulada: a profundidade diminui conforme o level sobe. Level 1-4 usa `search_depth`, level 5-9 limita para 2, level 10+ limita para 1.
+
+`HeuristicAgent` continua existindo como nome compativel, herdando `StateGoalHeuristicAgent`.
+
+O avaliador registra score, linhas, pecas, recompensa total, motivo de encerramento, profundidade maxima, profundidade efetiva, beam width, decisoes, nos expandidos, media de nos por decisao e maior custo de decisao.
+
+Execute:
 
 ```bash
 pytest
-python -m tetris_ai.cli.evaluate_agents --episodes 5 --max-pieces 100
+python -m tetris_ai.cli.evaluate_agents --episodes 5 --max-pieces 100 --search-depth 3 --beam-width 8
 ```
 
-O segundo comando compara os dois agentes e escreve `results/evaluation.csv`.
+## Visualizacao grafica
 
-## Validações executadas
+A visualizacao fica isolada em `visualization/` e usa `tkinter`. Ela observa o agente jogar sem alterar o contrato do ambiente: as decisoes continuam passando por `Agent.select_action(env)` e as transicoes continuam em `TetrisEnv.step(action)`.
 
-Na implementação desta fase foram executados, a partir da raiz do repositório:
+```bash
+python -m tetris_ai.cli.watch_agent --agent state-goal --seed 0 --max-pieces 500 --search-depth 3 --beam-width 8 --delay-ms 80
+```
+
+O viewer mostra tabuleiro no estilo original, `HOLD`, `NEXT`, score, level, linhas, ultima acao, reward, valor heuristico e nos expandidos.
+
+## Validacoes
+
+Foram executados:
 
 ```bash
 python -m pytest
-python -m pip install -e .
-python -m tetris_ai.cli.evaluate_agents --episodes 5 --max-pieces 100
+python -m tetris_ai.cli.evaluate_agents --episodes 1 --max-pieces 20 --search-depth 3 --beam-width 4
+python -m tetris_ai.cli.watch_agent --help
 ```
 
-O `pytest` concluiu com 11 testes aprovados. A avaliação criou o CSV com 10 episódios (cinco para cada agente).
+## Limitacoes e proximos passos
 
-## Limitações e próximos passos
-
-Esta fase não oferece renderização, modo humano, hold, soft drop, níveis, T-spins, wall kicks avançados, Gymnasium, algoritmo genético, aprendizado por reforço, rede neural, multiplayer ou dashboards. Próximas etapas podem adicionar uma camada de visualização isolada, adaptador Gymnasium e agentes de busca/aprendizado sem modificar o núcleo.
+Esta fase ainda nao oferece modo humano, soft drop, wall kicks avancados, Gymnasium, algoritmo genetico, aprendizado por reforco, rede neural, multiplayer ou dashboards. Proximas etapas podem adicionar esses recursos sem modificar o nucleo principal.
