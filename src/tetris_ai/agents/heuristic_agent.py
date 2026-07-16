@@ -12,23 +12,20 @@ from .base import Agent
 class TetrisGoal:
     """Objective function used by the state/goal/search agent."""
 
-    name: str = "survive_clear_lines_and_keep_board_playable"
-    line_clear_weight: float = 60.0
-    aggregate_height_penalty: float = 0.8
-    max_height_penalty: float = 1.5
-    hole_penalty: float = 7.5
-    bumpiness_penalty: float = 1.2
-    unsafe_height_threshold: int = 16
-    unsafe_height_penalty: float = 10.0
+    name: str = "dellacherie_simplified"
+    line_clear_weight: float = 3.4
+    aggregate_height_penalty: float = 0.51
+    hole_penalty: float = 35.6
+    bumpiness_penalty: float = 0.18
+    unsafe_height_threshold: int = 15
+    unsafe_height_penalty: float = 20.0
     game_over_penalty: float = 10_000.0
 
-    def evaluate(self, observation: Observation) -> float:
+    def evaluate_board(self, observation: Observation) -> float:
         metrics = observation.metrics
         unsafe_height = max(0, metrics.max_height - self.unsafe_height_threshold)
         value = (
-            self.line_clear_weight * metrics.lines_cleared_last_move
             - self.aggregate_height_penalty * metrics.aggregate_height
-            - self.max_height_penalty * metrics.max_height
             - self.hole_penalty * metrics.holes
             - self.bumpiness_penalty * metrics.bumpiness
             - self.unsafe_height_penalty * unsafe_height
@@ -51,6 +48,7 @@ class EvaluatedAction:
     action: Action
     env: TetrisEnv
     done: bool
+    lines_cleared: int
 
 
 @dataclass
@@ -123,27 +121,41 @@ class StateGoalHeuristicAgent(Agent):
         evaluated_actions = self._rank_immediate_actions(env)
         if not evaluated_actions:
             return SearchResult(0.0, (), 0)
+
         nodes_expanded = len(evaluated_actions)
         beam = evaluated_actions[: self.beam_width]
+
         if depth <= 1:
             best = beam[0]
-            return SearchResult(best.value, (best.action,), nodes_expanded)
+            final_value = self.goal.evaluate_board(best.env.get_observation()) + (
+                self.goal.line_clear_weight * best.lines_cleared
+            )
+            return SearchResult(final_value, (best.action,), nodes_expanded)
 
         best_result: SearchResult | None = None
         total_nodes_expanded = nodes_expanded
+
         for candidate in beam:
             if candidate.done:
-                result = SearchResult(candidate.value, (candidate.action,), 0)
+                final_value = self.goal.evaluate_board(candidate.env.get_observation()) + (
+                    self.goal.line_clear_weight * candidate.lines_cleared
+                )
+                result = SearchResult(final_value, (candidate.action,), 0)
             else:
-                future = self._search_best_plan(candidate.env, depth - 1)
+                next_depth = depth if candidate.action.is_hold else depth - 1
+                future = self._search_best_plan(candidate.env, next_depth)
+
+                plan_value = self.goal.line_clear_weight * candidate.lines_cleared + future.value
                 result = SearchResult(
-                    candidate.value + self.discount * future.value,
+                    plan_value,
                     (candidate.action, *future.plan),
                     future.nodes_expanded,
                 )
                 total_nodes_expanded += future.nodes_expanded
+
             if best_result is None or result.value > best_result.value:
                 best_result = result
+
         assert best_result is not None
         return SearchResult(best_result.value, best_result.plan, total_nodes_expanded)
 
@@ -153,8 +165,12 @@ class StateGoalHeuristicAgent(Agent):
 
     def _evaluate_immediate_action(self, env: TetrisEnv, action: Action) -> EvaluatedAction:
         next_env = env.clone()
-        observation, _, done, _ = next_env.step(action)
-        return EvaluatedAction(self.goal.evaluate(observation), action, next_env, done)
+        observation, _, done, info = next_env.step(action)
+        lines_cleared = info.get("lines_cleared", 0)
+
+        quick_estimate = self.goal.evaluate_board(observation) + self.goal.line_clear_weight * lines_cleared
+
+        return EvaluatedAction(quick_estimate, action, next_env, done, lines_cleared)
 
     def decision_metrics(self) -> dict[str, int | float | str | None]:
         return {

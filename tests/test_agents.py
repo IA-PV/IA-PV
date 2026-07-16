@@ -27,7 +27,11 @@ def test_state_goal_heuristic_agent_tracks_decision_metrics() -> None:
     assert metrics["effective_search_depth"] == 2
     assert metrics["beam_width"] == 4
     assert metrics["nodes_expanded"] > len(env.legal_actions())
-    assert metrics["last_plan_length"] == 2
+    assert (
+        metrics["effective_search_depth"]
+        <= metrics["last_plan_length"]
+        <= metrics["effective_search_depth"] + 1
+    )
 
 
 def test_evaluator_reports_search_metrics_for_agent() -> None:
