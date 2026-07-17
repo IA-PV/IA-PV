@@ -8,6 +8,7 @@ def test_collision_with_walls_and_floor() -> None:
     board = Board(width=4, height=4)
     assert not board.is_valid_position(DOT, -1, 0)
     assert not board.is_valid_position(DOT, 4, 0)
+    assert not board.is_valid_position(DOT, 0, -1)
     assert not board.is_valid_position(DOT, 0, 4)
     assert board.drop_row(DOT, 2) == 3
 

@@ -156,37 +156,18 @@ class TetrisTkViewer:
         self._commit_active_move()
 
     def _start_active_move(self) -> None:
-        piece = self.env.current_piece
-        action = self.agent.select_action(self.env)
-        if action.is_hold:
-            self._commit_hold_action(piece, action)
+        context = self.env.decision_context()
+        action = self.agent.select_action(context)
+        preview = self.env.describe_action(action)
+        if self.env.current_piece is None:
             return
-        shape = rotations_for(piece)[action.rotation]
-        target_row = self.env.board.drop_row(shape, action.column)
-        if target_row is None:
-            return
-        self.active_move = ActiveMove(piece=piece, action=action, target_row=target_row)
-
-    def _commit_hold_action(self, piece: PieceType, action: Action) -> None:
-        observation, reward, _, info = self.env.step(action)
-        self.visual_board.sync_with_matrix(observation.board)
-        self.total_reward += reward
-        decision = self._decision_metrics()
-        self.last_step = StepSummary(
-            piece=piece,
-            action=action,
-            reward=reward,
-            lines_cleared=int(info["lines_cleared"]),
-            selected_value=decision.get("last_selected_value"),
-            nodes_expanded=decision.get("last_nodes_expanded"),
-            plan=self._last_plan(),
-        )
+        self.active_move = ActiveMove(piece=preview.piece, action=action, target_row=preview.row)
 
     def _commit_active_move(self) -> None:
         if self.active_move is None:
             return
         move = self.active_move
-        observation, reward, _, info = self.env.step(move.action)
+        observation, reward, _, _, info = self.env.step(move.action)
         self.visual_board.place(move.piece, move.action, move.target_row)
         self.visual_board.clear_full_lines()
         self.visual_board.sync_with_matrix(observation.board)
@@ -273,7 +254,11 @@ class TetrisTkViewer:
 
         selected_value = "n/a" if self.last_step.selected_value is None else f"{self.last_step.selected_value:.1f}"
         nodes = "n/a" if self.last_step.nodes_expanded is None else str(self.last_step.nodes_expanded)
-        move_text = "HOLD" if self.last_step.action.is_hold else f"{self.last_step.piece.value} r{self.last_step.action.rotation} c{self.last_step.action.column}"
+        hold_prefix = "H+" if self.last_step.action.is_hold else ""
+        move_text = (
+            f"{hold_prefix}{self.last_step.piece.value} "
+            f"r{self.last_step.action.rotation} c{self.last_step.action.column}"
+        )
         self._panel_text(
             x,
             y + 40,
