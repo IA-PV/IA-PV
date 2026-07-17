@@ -49,9 +49,9 @@ O agente recebe `DecisionContext`, nao a instancia real de `TetrisEnv`. Simulaco
 Abra uma janela para assistir o agente jogando:
 
 ```bash
-python -m tetris_ai.cli.watch_agent --agent state-goal --seed 0 --max-pieces 500 --search-depth 3 --beam-width 8 --delay-ms 80
+python -m tetris_ai.cli.watch_agent --agent state-goal --seed 0 --max-pieces 500 --search-depth 3 --beam-width 8 --delay-ms 80 --min-delay-ms 18 --level-speed-factor 0.85
 ```
 
-O visualizador usa o estilo da interface original, com tabuleiro a esquerda, painel lateral, `HOLD`, `NEXT` desenhado, score, level, linhas, ultima jogada e nos expandidos pela busca.
+O visualizador usa o estilo da interface original, com tabuleiro a esquerda, painel lateral, `HOLD`, `NEXT` desenhado, score, level, linhas, ultima jogada e nos expandidos pela busca. A animacao acelera a cada level: `delay = max(min_delay, round(delay_base * fator^(level - 1)))`. Esse tempo pertence somente a apresentacao e nao altera as regras, os agentes, a recompensa ou os resultados do ambiente `planning-v1`.
 
 A especificacao formal do ambiente esta em [docs/ENVIRONMENT_SPEC.md](docs/ENVIRONMENT_SPEC.md). A arquitetura, a migracao e as limitacoes estao em [docs/ARCHITECTURE_AND_MIGRATION.md](docs/ARCHITECTURE_AND_MIGRATION.md).

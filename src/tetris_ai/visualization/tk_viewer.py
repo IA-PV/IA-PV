@@ -40,6 +40,33 @@ class StepSummary:
     plan: tuple[Action, ...]
 
 
+@dataclass(frozen=True)
+class AnimationTiming:
+    """Presentation-only timing policy for the falling-piece animation."""
+
+    base_delay_ms: int = 80
+    min_delay_ms: int = 18
+    level_speed_factor: float = 0.85
+
+    def __post_init__(self) -> None:
+        if self.base_delay_ms <= 0:
+            raise ValueError("base_delay_ms must be positive.")
+        if self.min_delay_ms <= 0:
+            raise ValueError("min_delay_ms must be positive.")
+        if self.min_delay_ms > self.base_delay_ms:
+            raise ValueError("min_delay_ms must not exceed base_delay_ms.")
+        if not 0.0 < self.level_speed_factor <= 1.0:
+            raise ValueError("level_speed_factor must be greater than 0 and at most 1.")
+
+    def delay_for_level(self, level: int) -> int:
+        """Return the delay for one rendered row at a one-based game level."""
+
+        if level < 1:
+            raise ValueError("level must be at least 1.")
+        scaled_delay = round(self.base_delay_ms * self.level_speed_factor ** (level - 1))
+        return max(self.min_delay_ms, scaled_delay)
+
+
 @dataclass
 class ActiveMove:
     piece: PieceType
@@ -82,10 +109,22 @@ class VisualBoard:
 
 
 class TetrisTkViewer:
-    def __init__(self, env: TetrisEnv, agent: Agent, delay_ms: int = 80) -> None:
+    def __init__(
+        self,
+        env: TetrisEnv,
+        agent: Agent,
+        delay_ms: int = 80,
+        *,
+        min_delay_ms: int = 18,
+        level_speed_factor: float = 0.85,
+    ) -> None:
         self.env = env
         self.agent = agent
-        self.delay_ms = delay_ms
+        self.animation_timing = AnimationTiming(
+            base_delay_ms=delay_ms,
+            min_delay_ms=min_delay_ms,
+            level_speed_factor=level_speed_factor,
+        )
         self.running = True
         self.total_reward = 0.0
         self.last_step: StepSummary | None = None
@@ -117,7 +156,7 @@ class TetrisTkViewer:
         self._render()
 
     def run(self) -> None:
-        self.root.after(self.delay_ms, self._auto_step)
+        self.root.after(self._current_delay_ms(), self._auto_step)
         self.root.mainloop()
 
     def toggle_running(self) -> None:
@@ -144,7 +183,10 @@ class TetrisTkViewer:
         if self.running and not self.env.done:
             self._advance_game()
             self._render()
-        self.root.after(self.delay_ms, self._auto_step)
+        self.root.after(self._current_delay_ms(), self._auto_step)
+
+    def _current_delay_ms(self) -> int:
+        return self.animation_timing.delay_for_level(self.env.level)
 
     def _advance_game(self) -> None:
         if self.active_move is None:

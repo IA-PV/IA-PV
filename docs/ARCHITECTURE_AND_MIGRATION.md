@@ -40,7 +40,7 @@ Bitboards permanecem uma opcao futura. A migracao so deve ocorrer depois de prof
 
 ## Visualizacao e avaliacao
 
-O visualizador usa `describe_action` para animar a colocacao sem acessar o tabuleiro mutavel. O avaliador fornece `DecisionContext` aos agentes e registra `terminated`, `truncated` e `config_id`, alem das metricas de busca existentes.
+O visualizador usa `describe_action` para animar a colocacao sem acessar o tabuleiro mutavel. A velocidade de animacao pode cair por level ate um piso configuravel, mas pertence exclusivamente a interface: nao participa de `TetrisConfig`, do hash de estado, do RNG, da recompensa ou da avaliacao. O avaliador fornece `DecisionContext` aos agentes e registra `terminated`, `truncated` e `config_id`, alem das metricas de busca existentes.
 
 Execute:
 
