@@ -10,6 +10,13 @@ Requer Python 3.10 ou superior.
 python -m pip install -e ".[dev]"
 ```
 
+Para usar o agente de aprendizado por reforco baseado em PyTorch, instale o
+extra de RL:
+
+```bash
+python -m pip install -e ".[dev,rl]"
+```
+
 ## Comandos
 
 Execute os testes:
