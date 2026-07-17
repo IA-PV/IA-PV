@@ -17,6 +17,9 @@ class EpisodeResult:
     pieces_placed: int
     total_reward: float
     termination_reason: str | None
+    terminated: bool
+    truncated: bool
+    config_id: str
     search_depth: int = 0
     effective_search_depth: int = 0
     beam_width: int = 0
@@ -33,7 +36,8 @@ def evaluate_episode(agent: Agent, seed: int, max_pieces: int = 500) -> EpisodeR
     env = TetrisEnv(max_pieces=max_pieces, seed=seed)
     total_reward = 0.0
     while not env.done:
-        _, reward, _, _ = env.step(agent.select_action(env))
+        context = env.decision_context()
+        _, reward, _, _, _ = env.step(agent.select_action(context))
         total_reward += reward
     decision_metrics = _decision_metrics_for(agent)
     return EpisodeResult(
@@ -44,6 +48,9 @@ def evaluate_episode(agent: Agent, seed: int, max_pieces: int = 500) -> EpisodeR
         pieces_placed=env.total_pieces_placed,
         total_reward=total_reward,
         termination_reason=env.termination_reason,
+        terminated=env.terminated,
+        truncated=env.truncated,
+        config_id=env.config.fingerprint,
         search_depth=decision_metrics["search_depth"],
         effective_search_depth=decision_metrics["effective_search_depth"],
         beam_width=decision_metrics["beam_width"],
@@ -56,7 +63,7 @@ def evaluate_episode(agent: Agent, seed: int, max_pieces: int = 500) -> EpisodeR
 
 def _decision_metrics_for(agent: Agent) -> dict[str, int | float]:
     metrics_method = getattr(agent, "decision_metrics", None)
-    if not callable(metrics_method):
+    if not callable(metrics_method):    
         return _empty_decision_metrics()
     raw_metrics = metrics_method()
     return {

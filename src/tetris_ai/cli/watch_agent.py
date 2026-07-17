@@ -15,51 +15,40 @@ def main() -> None:
     parser.add_argument("--max-pieces", type=int, default=500)
     parser.add_argument("--search-depth", type=int, default=3)
     parser.add_argument("--beam-width", type=int, default=8)
-    parser.add_argument("--delay-ms", type=int, default=80, help="Delay between animation frames.")
+    parser.add_argument("--delay-ms", type=int, default=80, help="Base delay per rendered row at level 1.")
+    parser.add_argument("--min-delay-ms", type=int, default=18, help="Minimum delay per rendered row.")
+    parser.add_argument(
+        "--level-speed-factor",
+        type=float,
+        default=0.85,
+        help="Multiplier applied to the animation delay for each level.",
+    )
     parser.add_argument("--rl-train-episodes", type=int, default=0, help="Episodes to train an RL agent before opening the viewer.")
     parser.add_argument("--rl-checkpoint", type=Path, default=None, help="Optional RL checkpoint to load and/or save.")
     args = parser.parse_args()
 
-    if (
-        args.max_pieces <= 0
-        or args.search_depth <= 0
-        or args.beam_width <= 0
-        or args.delay_ms <= 0
-        or args.rl_train_episodes < 0
-    ):
-        parser.error("--max-pieces, --search-depth, --beam-width, and --delay-ms must be positive; --rl-train-episodes cannot be negative.")
+    if args.max_pieces <= 0 or args.search_depth <= 0 or args.beam_width <= 0:
+        parser.error("--max-pieces, --search-depth, and --beam-width must be positive.")
+    if args.delay_ms <= 0 or args.min_delay_ms <= 0:
+        parser.error("--delay-ms and --min-delay-ms must be positive.")
+    if args.min_delay_ms > args.delay_ms:
+        parser.error("--min-delay-ms must not exceed --delay-ms.")
+    if not 0.0 < args.level_speed_factor <= 1.0:
+        parser.error("--level-speed-factor must be greater than 0 and at most 1.")
 
     env = TetrisEnv(max_pieces=args.max_pieces, seed=args.seed)
     if args.agent == "random":
         agent = RandomAgent(seed=args.seed)
     elif args.agent == "state-goal":
         agent = StateGoalHeuristicAgent(search_depth=args.search_depth, beam_width=args.beam_width)
-    else:
-        # Import only for the RL option so the viewer remains usable without
-        # the optional PyTorch dependency.
-        from ..agents.rl_agent import RLAgent
 
-        agent = RLAgent(
-            batch_size=128,
-            replay_capacity=50_000,
-            learning_rate=3e-4,
-            epsilon_min=0.10,
-            epsilon_decay=0.9999,
-            target_update_interval=500,
-            seed=args.seed,
-        )
-        if args.rl_checkpoint is not None and args.rl_checkpoint.exists():
-            agent.load(args.rl_checkpoint)
-        elif args.rl_checkpoint is not None and args.rl_train_episodes == 0:
-            parser.error("Checkpoint not found. Supply --rl-train-episodes to create it.")
-
-        if args.rl_train_episodes:
-            _train_rl(agent, args.rl_train_episodes, args.max_pieces, args.seed)
-            if args.rl_checkpoint is not None:
-                agent.save(args.rl_checkpoint)
-        agent.eval()
-
-    TetrisTkViewer(env, agent, delay_ms=args.delay_ms).run()
+    TetrisTkViewer(
+        env,
+        agent,
+        delay_ms=args.delay_ms,
+        min_delay_ms=args.min_delay_ms,
+        level_speed_factor=args.level_speed_factor,
+    ).run()
 
 
 def _train_rl(agent: "RLAgent", episodes: int, max_pieces: int, seed: int) -> None:

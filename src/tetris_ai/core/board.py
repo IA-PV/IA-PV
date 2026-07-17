@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from copy import deepcopy
-
 Shape = tuple[tuple[int, ...], ...]
 
 
@@ -25,25 +23,30 @@ class Board:
     def matrix(self) -> tuple[tuple[int, ...], ...]:
         return tuple(tuple(row) for row in self._grid)
 
+    def is_filled_or_wall(self, row: int, column: int) -> bool:
+        if row < 0 or row >= self.height or column < 0 or column >= self.width:
+            return True
+        return bool(self._grid[row][column])
+
     def clone(self) -> "Board":
         clone = Board(self.width, self.height)
-        clone._grid = deepcopy(self._grid)
+        clone._grid = [row.copy() for row in self._grid]
         return clone
 
     def is_valid_position(self, shape: Shape, column: int, row: int) -> bool:
         """Return whether all occupied cells fit without colliding.
 
-        Cells above the visible board are allowed while a piece is spawning; cells
-        below the floor or outside either wall are not.
+        This planning ruleset has no hidden spawn rows. Every occupied cell must
+        fit inside the visible board.
         """
         for shape_row, cells in enumerate(shape):
             for shape_column, occupied in enumerate(cells):
                 if not occupied:
                     continue
                 x, y = column + shape_column, row + shape_row
-                if x < 0 or x >= self.width or y >= self.height:
+                if x < 0 or x >= self.width or y < 0 or y >= self.height:
                     return False
-                if y >= 0 and self._grid[y][x]:
+                if self._grid[y][x]:
                     return False
         return True
 
@@ -63,8 +66,7 @@ class Board:
             for shape_column, occupied in enumerate(cells):
                 if occupied:
                     y = row + shape_row
-                    if y >= 0:
-                        self._grid[y][column + shape_column] = 1
+                    self._grid[y][column + shape_column] = 1
 
     def clear_lines(self) -> int:
         remaining = [row for row in self._grid if not all(row)]

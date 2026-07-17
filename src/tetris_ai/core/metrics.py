@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 
 from .board import Board
 
@@ -15,6 +15,9 @@ class BoardMetrics:
     holes: int
     bumpiness: int
     lines_cleared_last_move: int = 0
+
+    def as_dict(self) -> dict[str, int | tuple[int, ...]]:
+        return asdict(self)
 
 
 def calculate_metrics(board: Board, lines_cleared_last_move: int = 0) -> BoardMetrics:

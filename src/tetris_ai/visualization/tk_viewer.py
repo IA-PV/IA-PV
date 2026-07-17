@@ -40,6 +40,33 @@ class StepSummary:
     plan: tuple[Action, ...]
 
 
+@dataclass(frozen=True)
+class AnimationTiming:
+    """Presentation-only timing policy for the falling-piece animation."""
+
+    base_delay_ms: int = 80
+    min_delay_ms: int = 18
+    level_speed_factor: float = 0.85
+
+    def __post_init__(self) -> None:
+        if self.base_delay_ms <= 0:
+            raise ValueError("base_delay_ms must be positive.")
+        if self.min_delay_ms <= 0:
+            raise ValueError("min_delay_ms must be positive.")
+        if self.min_delay_ms > self.base_delay_ms:
+            raise ValueError("min_delay_ms must not exceed base_delay_ms.")
+        if not 0.0 < self.level_speed_factor <= 1.0:
+            raise ValueError("level_speed_factor must be greater than 0 and at most 1.")
+
+    def delay_for_level(self, level: int) -> int:
+        """Return the delay for one rendered row at a one-based game level."""
+
+        if level < 1:
+            raise ValueError("level must be at least 1.")
+        scaled_delay = round(self.base_delay_ms * self.level_speed_factor ** (level - 1))
+        return max(self.min_delay_ms, scaled_delay)
+
+
 @dataclass
 class ActiveMove:
     piece: PieceType
@@ -82,10 +109,22 @@ class VisualBoard:
 
 
 class TetrisTkViewer:
-    def __init__(self, env: TetrisEnv, agent: Agent, delay_ms: int = 80) -> None:
+    def __init__(
+        self,
+        env: TetrisEnv,
+        agent: Agent,
+        delay_ms: int = 80,
+        *,
+        min_delay_ms: int = 18,
+        level_speed_factor: float = 0.85,
+    ) -> None:
         self.env = env
         self.agent = agent
-        self.delay_ms = delay_ms
+        self.animation_timing = AnimationTiming(
+            base_delay_ms=delay_ms,
+            min_delay_ms=min_delay_ms,
+            level_speed_factor=level_speed_factor,
+        )
         self.running = True
         self.total_reward = 0.0
         self.last_step: StepSummary | None = None
@@ -117,7 +156,7 @@ class TetrisTkViewer:
         self._render()
 
     def run(self) -> None:
-        self.root.after(self.delay_ms, self._auto_step)
+        self.root.after(self._current_delay_ms(), self._auto_step)
         self.root.mainloop()
 
     def toggle_running(self) -> None:
@@ -144,7 +183,10 @@ class TetrisTkViewer:
         if self.running and not self.env.done:
             self._advance_game()
             self._render()
-        self.root.after(self.delay_ms, self._auto_step)
+        self.root.after(self._current_delay_ms(), self._auto_step)
+
+    def _current_delay_ms(self) -> int:
+        return self.animation_timing.delay_for_level(self.env.level)
 
     def _advance_game(self) -> None:
         if self.active_move is None:
@@ -156,37 +198,18 @@ class TetrisTkViewer:
         self._commit_active_move()
 
     def _start_active_move(self) -> None:
-        piece = self.env.current_piece
-        action = self.agent.select_action(self.env)
-        if action.is_hold:
-            self._commit_hold_action(piece, action)
+        context = self.env.decision_context()
+        action = self.agent.select_action(context)
+        preview = self.env.describe_action(action)
+        if self.env.current_piece is None:
             return
-        shape = rotations_for(piece)[action.rotation]
-        target_row = self.env.board.drop_row(shape, action.column)
-        if target_row is None:
-            return
-        self.active_move = ActiveMove(piece=piece, action=action, target_row=target_row)
-
-    def _commit_hold_action(self, piece: PieceType, action: Action) -> None:
-        observation, reward, _, info = self.env.step(action)
-        self.visual_board.sync_with_matrix(observation.board)
-        self.total_reward += reward
-        decision = self._decision_metrics()
-        self.last_step = StepSummary(
-            piece=piece,
-            action=action,
-            reward=reward,
-            lines_cleared=int(info["lines_cleared"]),
-            selected_value=decision.get("last_selected_value"),
-            nodes_expanded=decision.get("last_nodes_expanded"),
-            plan=self._last_plan(),
-        )
+        self.active_move = ActiveMove(piece=preview.piece, action=action, target_row=preview.row)
 
     def _commit_active_move(self) -> None:
         if self.active_move is None:
             return
         move = self.active_move
-        observation, reward, _, info = self.env.step(move.action)
+        observation, reward, _, _, info = self.env.step(move.action)
         self.visual_board.place(move.piece, move.action, move.target_row)
         self.visual_board.clear_full_lines()
         self.visual_board.sync_with_matrix(observation.board)
@@ -273,7 +296,11 @@ class TetrisTkViewer:
 
         selected_value = "n/a" if self.last_step.selected_value is None else f"{self.last_step.selected_value:.1f}"
         nodes = "n/a" if self.last_step.nodes_expanded is None else str(self.last_step.nodes_expanded)
-        move_text = "HOLD" if self.last_step.action.is_hold else f"{self.last_step.piece.value} r{self.last_step.action.rotation} c{self.last_step.action.column}"
+        hold_prefix = "H+" if self.last_step.action.is_hold else ""
+        move_text = (
+            f"{hold_prefix}{self.last_step.piece.value} "
+            f"r{self.last_step.action.rotation} c{self.last_step.action.column}"
+        )
         self._panel_text(
             x,
             y + 40,

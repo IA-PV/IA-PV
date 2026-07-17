@@ -5,8 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 
 from ..core.metrics import BoardMetrics
-
-LINE_REWARD = {0: 0.0, 1: 1.0, 2: 3.0, 3: 5.0, 4: 8.0}
+from .config import RewardConfig
 
 
 @dataclass(frozen=True)
@@ -16,17 +15,46 @@ class RewardBreakdown:
     aggregate_height_penalty: float
     bumpiness_penalty: float
     terminal_penalty: float
+    truncation_penalty: float
     total: float
 
     def as_dict(self) -> dict[str, float]:
         return asdict(self)
 
 
-def calculate_reward(before: BoardMetrics, after: BoardMetrics, lines_cleared: int, done: bool) -> RewardBreakdown:
-    line_reward = LINE_REWARD[lines_cleared]
-    holes_penalty = -0.75 * (after.holes - before.holes)
-    aggregate_height_penalty = -0.10 * (after.aggregate_height - before.aggregate_height)
-    bumpiness_penalty = -0.15 * (after.bumpiness - before.bumpiness)
-    terminal_penalty = -10.0 if done else 0.0
-    total = line_reward + holes_penalty + aggregate_height_penalty + bumpiness_penalty + terminal_penalty
-    return RewardBreakdown(line_reward, holes_penalty, aggregate_height_penalty, bumpiness_penalty, terminal_penalty, total)
+def calculate_reward(
+    before: BoardMetrics,
+    after: BoardMetrics,
+    lines_cleared: int,
+    terminated: bool,
+    truncated: bool,
+    config: RewardConfig,
+) -> RewardBreakdown:
+    line_reward = config.line_rewards[lines_cleared]
+    if config.enable_shaping:
+        holes_penalty = config.holes_delta_weight * (after.holes - before.holes)
+        aggregate_height_penalty = config.aggregate_height_delta_weight * (
+            after.aggregate_height - before.aggregate_height
+        )
+        bumpiness_penalty = config.bumpiness_delta_weight * (after.bumpiness - before.bumpiness)
+    else:
+        holes_penalty = aggregate_height_penalty = bumpiness_penalty = 0.0
+    terminal_penalty = config.terminal_penalty if terminated else 0.0
+    truncation_penalty = config.truncation_penalty if truncated else 0.0
+    total = (
+        line_reward
+        + holes_penalty
+        + aggregate_height_penalty
+        + bumpiness_penalty
+        + terminal_penalty
+        + truncation_penalty
+    )
+    return RewardBreakdown(
+        line_reward,
+        holes_penalty,
+        aggregate_height_penalty,
+        bumpiness_penalty,
+        terminal_penalty,
+        truncation_penalty,
+        total,
+    )

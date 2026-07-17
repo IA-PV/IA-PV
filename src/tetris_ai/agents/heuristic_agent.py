@@ -3,8 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from ..env.action import Action
+from ..env.context import DecisionContext
 from ..env.observation import Observation
-from ..env.tetris_env import TetrisEnv
 from .base import Agent
 
 
@@ -27,6 +27,8 @@ class TetrisGoal:
         termination_reason: str | None = None,
     ) -> float:
         metrics = observation.metrics
+        if metrics is None:
+            raise ValueError("StateGoalHeuristicAgent requires observation_mode='featured'.")
         unsafe_height = max(0, metrics.max_height - self.unsafe_height_threshold)
         value = (
             - self.aggregate_height_penalty * metrics.aggregate_height
@@ -34,7 +36,8 @@ class TetrisGoal:
             - self.bumpiness_penalty * metrics.bumpiness
             - self.unsafe_height_penalty * unsafe_height
         )
-        if termination_reason == "game_over":
+        reasons = set(termination_reason.split("+")) if termination_reason else set()
+        if observation.terminated or "game_over" in reasons:
             value -= self.game_over_penalty
         return value
 
@@ -50,7 +53,7 @@ class SearchResult:
 class EvaluatedAction:
     value: float
     action: Action
-    env: TetrisEnv
+    context: DecisionContext
     done: bool
     lines_cleared: int
     termination_reason: str | None
@@ -91,9 +94,8 @@ class StateGoalHeuristicAgent(Agent):
 
     The agent keeps an internal state from observations, defines a goal function
     over board quality, and searches future action sequences on cloned
-    environments. A depth-first search ranks every immediate action and applies
-    local beam pruning at each node before exploring future states. The selected
-    action is the first move of the best plan found.
+    forward models containing only publicly visible pieces. The selected action
+    is the first move of the best plan found.
     """
 
     def __init__(
@@ -111,12 +113,12 @@ class StateGoalHeuristicAgent(Agent):
         self.beam_width = beam_width
         self.state = AgentState()
 
-    def select_action(self, env: TetrisEnv) -> Action:
-        effective_depth = self._effective_search_depth(env.level)
-        result = self._search_best_plan(env, effective_depth)
+    def select_action(self, context: DecisionContext) -> Action:
+        effective_depth = self._effective_search_depth(context.observation.level)
+        result = self._search_best_plan(context, effective_depth)
         if not result.plan:
             raise RuntimeError("No legal action is available.")
-        self.state.record_decision(env.get_observation(), result, effective_depth)
+        self.state.record_decision(context.observation, result, effective_depth)
         return result.plan[0]
 
     def _effective_search_depth(self, level: int) -> int:
@@ -126,39 +128,41 @@ class StateGoalHeuristicAgent(Agent):
             return min(self.search_depth, 2)
         return self.search_depth
 
-    def _search_best_plan(self, env: TetrisEnv, depth: int) -> SearchResult:
-        """Search plans by locked-piece depth with local beam pruning.
-
-        HOLD is a preparatory action: it remains in the plan but does not consume
-        depth. Consequently, every non-terminal leaf at depth zero represents a
-        state reached after the requested number of pieces has been locked.
-        """
-        if depth <= 0 or env.done:
-            leaf_value = self.goal.evaluate_board(env.get_observation(), env.termination_reason)
+    def _search_best_plan(self, context: DecisionContext, depth: int) -> SearchResult:
+        if depth <= 0 or context.observation.done:
+            leaf_value = self.goal.evaluate_board(context.observation)
             return SearchResult(leaf_value, (), 0)
 
-        evaluated_actions = self._rank_immediate_actions(env)
+        evaluated_actions = self._rank_immediate_actions(context)
         if not evaluated_actions:
-            leaf_value = self.goal.evaluate_board(env.get_observation(), env.termination_reason)
+            leaf_value = self.goal.evaluate_board(context.observation)
             return SearchResult(leaf_value, (), 0)
 
         nodes_expanded = len(evaluated_actions)
-        local_beam = evaluated_actions[: self.beam_width]
+        beam = evaluated_actions[: self.beam_width]
+
+        if depth <= 1:
+            best = beam[0]
+            final_value = self.goal.evaluate_board(
+                best.context.observation, best.termination_reason
+            ) + (
+                self.goal.line_clear_weight * best.lines_cleared
+            )
+            return SearchResult(final_value, (best.action,), nodes_expanded)
 
         best_result: SearchResult | None = None
         total_nodes_expanded = nodes_expanded
 
-        for candidate in local_beam:
+        for candidate in beam:
             if candidate.done:
                 final_value = self.goal.evaluate_board(
-                    candidate.env.get_observation(), candidate.termination_reason
+                    candidate.context.observation, candidate.termination_reason
                 ) + (
                     self.goal.line_clear_weight * candidate.lines_cleared
                 )
                 result = SearchResult(final_value, (candidate.action,), 0)
             else:
-                next_depth = depth if candidate.action.is_hold else depth - 1
-                future = self._search_best_plan(candidate.env, next_depth)
+                future = self._search_best_plan(candidate.context, depth - 1)
 
                 plan_value = self.goal.line_clear_weight * candidate.lines_cleared + future.value
                 result = SearchResult(
@@ -174,15 +178,17 @@ class StateGoalHeuristicAgent(Agent):
         assert best_result is not None
         return SearchResult(best_result.value, best_result.plan, total_nodes_expanded)
 
-    def _rank_immediate_actions(self, env: TetrisEnv) -> list[EvaluatedAction]:
-        evaluated_actions = [self._evaluate_immediate_action(env, action) for action in env.legal_actions()]
+    def _rank_immediate_actions(self, context: DecisionContext) -> list[EvaluatedAction]:
+        evaluated_actions = [
+            self._evaluate_immediate_action(context, action) for action in context.legal_actions
+        ]
         return sorted(evaluated_actions, key=lambda item: item.value, reverse=True)
 
-    def _evaluate_immediate_action(self, env: TetrisEnv, action: Action) -> EvaluatedAction:
-        next_env = env.clone()
-        observation, _, done, info = next_env.step(action)
-        lines_cleared = info.get("lines_cleared", 0)
-        termination_reason = info.get("termination_reason")
+    def _evaluate_immediate_action(self, context: DecisionContext, action: Action) -> EvaluatedAction:
+        transition = context.simulate(action)
+        observation = transition.context.observation
+        lines_cleared = int(transition.info.get("lines_cleared", 0))
+        termination_reason = transition.info.get("termination_reason")
 
         quick_estimate = self.goal.evaluate_board(
             observation, termination_reason
@@ -191,8 +197,8 @@ class StateGoalHeuristicAgent(Agent):
         return EvaluatedAction(
             quick_estimate,
             action,
-            next_env,
-            done,
+            transition.context,
+            transition.done,
             lines_cleared,
             termination_reason,
         )
