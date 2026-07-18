@@ -4,7 +4,7 @@ import argparse
 import csv
 from pathlib import Path
 
-from ..agents import RandomAgent, StateGoalHeuristicAgent
+from ..agents import QTableAgent, RandomAgent, StateGoalHeuristicAgent
 from ..evaluation import evaluate_episode
 
 
@@ -15,15 +15,31 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=0, help="First episode seed; following episodes increment it.")
     parser.add_argument("--search-depth", type=int, default=3, help="Maximum depth used by the state/goal heuristic-search agent.")
     parser.add_argument("--beam-width", type=int, default=8, help="Number of best immediate actions expanded by beam search.")
+    parser.add_argument(
+        "--q-table-checkpoint",
+        type=Path,
+        default=None,
+        help="Optional trained Q-table checkpoint to include in the CSV comparison.",
+    )
     args = parser.parse_args()
     if args.episodes <= 0 or args.max_pieces <= 0 or args.search_depth <= 0 or args.beam_width <= 0:
         parser.error("--episodes, --max-pieces, --search-depth, and --beam-width must be positive.")
+    if args.q_table_checkpoint is not None and not args.q_table_checkpoint.is_file():
+        parser.error("--q-table-checkpoint must point to an existing checkpoint file.")
 
     results = []
     for episode in range(args.episodes):
         seed = args.seed + episode
         results.append(evaluate_episode(RandomAgent(seed), seed, args.max_pieces))
         results.append(evaluate_episode(StateGoalHeuristicAgent(search_depth=args.search_depth, beam_width=args.beam_width), seed, args.max_pieces))
+        if args.q_table_checkpoint is not None:
+            q_table_agent = QTableAgent(seed=seed)
+            try:
+                q_table_agent.load(args.q_table_checkpoint)
+            except ValueError as error:
+                parser.error(f"Cannot load Q-table checkpoint: {error}")
+            q_table_agent.eval()
+            results.append(evaluate_episode(q_table_agent, seed, args.max_pieces))
 
     destination = Path(__file__).resolve().parents[3] / "results" / "evaluation.csv"
     destination.parent.mkdir(exist_ok=True)
