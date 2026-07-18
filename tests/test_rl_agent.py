@@ -1,5 +1,7 @@
 import pytest
 
+pytest.importorskip("torch", reason="Install the 'rl' extra to run RL agent tests.")
+
 from tetris_ai.agents import RLAgent
 from tetris_ai.env import DecisionContext, TetrisConfig, TetrisEnv
 

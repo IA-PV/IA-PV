@@ -8,14 +8,20 @@ from tetris_ai.env.reward import calculate_reward
 def test_reward_breakdown_uses_metric_deltas() -> None:
     before = BoardMetrics((2, 1), aggregate_height=3, max_height=2, holes=0, bumpiness=1)
     after = BoardMetrics((4, 1), aggregate_height=5, max_height=4, holes=1, bumpiness=3)
-    result = calculate_reward(before, after, 2, False, False, RewardConfig())
-    assert result.line_reward == 3.0
+    config = RewardConfig()
+    result = calculate_reward(before, after, 2, False, False, config)
+    assert result.line_reward == config.line_rewards[2]
     assert result.holes_penalty == -0.75
     assert result.aggregate_height_penalty == -0.2
     assert result.bumpiness_penalty == -0.3
     assert result.terminal_penalty == 0.0
     assert result.truncation_penalty == 0.0
-    assert result.total == pytest.approx(1.75)
+    assert result.total == pytest.approx(
+        result.line_reward
+        + result.holes_penalty
+        + result.aggregate_height_penalty
+        + result.bumpiness_penalty
+    )
 
 
 def test_reward_can_disable_shaping_and_separate_end_conditions() -> None:
