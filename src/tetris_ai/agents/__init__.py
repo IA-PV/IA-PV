@@ -1,6 +1,14 @@
 from typing import TYPE_CHECKING
 
 from .base import Agent
+from .genetic_agent import (
+    GeneticAgent,
+    GeneticModel,
+    GeneticPolicyConfig,
+    LinearChromosome,
+    load_chromosome,
+    load_genetic_model,
+)
 from .heuristic_agent import HeuristicAgent, StateGoalHeuristicAgent, TetrisGoal
 from .q_table_agent import QTableAgent
 from .random_agent import RandomAgent
@@ -13,13 +21,19 @@ if TYPE_CHECKING:
 
 __all__ = [
     "Agent",
+    "GeneticAgent",
+    "GeneticModel",
+    "GeneticPolicyConfig",
     "HeuristicAgent",
-    "RandomAgent",
+    "LinearChromosome",
     "QTableAgent",
+    "RandomAgent",
     "RLAgent",
     "StateGoalHeuristicAgent",
     "TetrisGoal",
     "TetrisNet",
+    "load_chromosome",
+    "load_genetic_model",
 ]
 
 

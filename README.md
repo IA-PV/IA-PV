@@ -44,6 +44,35 @@ python -m tetris_ai.cli.evaluate_agents --episodes 5 --max-pieces 100 --search-d
 
 O CSV e salvo em `results/evaluation.csv` com score, linhas removidas, recompensa, motivo de termino, profundidade efetiva, largura do feixe e nos expandidos.
 
+## Agente baseado em algoritmo genetico
+
+O terceiro agente evolui os pesos de uma politica linear sobre dez atributos
+normalizados e usa lookahead limitado por beam search. Cada geracao enfrenta um lote
+novo de sementes, e campeoes geracionais sao comparados em sementes separadas de
+validacao. Selecao por torneio, crossover aritmetico, mutacao gaussiana e elitismo
+produzem as proximas geracoes.
+
+Treine e salve o cromossomo, os hiperparametros e a curva de evolucao:
+
+```bash
+python -m tetris_ai.cli.train_genetic_agent --population-size 24 --generations 20 --episodes-per-individual 3 --validation-episodes 8 --max-pieces 200 --lookahead-depth 2 --lookahead-beam-width 4 --seed 0
+```
+
+Compare os tres agentes em sementes separadas das usadas no treino:
+
+```bash
+python -m tetris_ai.cli.evaluate_agents --episodes 20 --seed 1000 --max-pieces 200 --genetic-model results/genetic_agent.json
+```
+
+Assista ao modelo treinado:
+
+```bash
+python -m tetris_ai.cli.watch_agent --agent genetic --genetic-model results/genetic_agent.json --seed 1000
+```
+
+A formulacao, os genes, os hiperparametros, o protocolo experimental e as limitacoes
+estao detalhados em [docs/GENETIC_AGENT.md](docs/GENETIC_AGENT.md).
+
 ## Contrato do ambiente
 
 Cada acao representa uma colocacao final e trava exatamente uma peca. Uma acao com `use_hold=True` faz a troca e coloca a peca resultante na mesma transicao. O espaco possui `8 * width` IDs estaveis e a observacao fornece uma mascara para as combinacoes validas.
