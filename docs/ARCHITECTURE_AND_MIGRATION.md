@@ -8,13 +8,14 @@ src/tetris_ai/
   env/         configuracoes, acoes, observacoes, contexto e TetrisEnv
   agents/      contratos e politicas dos agentes
   evaluation/  execucao e resultados de episodios
+  training/    treinamento e artefatos dos agentes que aprendem
   visualization/ visualizador Tkinter isolado
   cli/         comandos de avaliacao e visualizacao
 tests/         testes unitarios e de integracao
 results/       CSVs gerados
 ```
 
-As dependencias seguem `core -> env -> agents/evaluation -> cli`. O nucleo nao importa agentes, interface grafica ou bibliotecas de RL.
+As dependencias seguem `core -> env -> agents/evaluation -> training -> cli`. O nucleo nao importa agentes, interface grafica ou bibliotecas de RL.
 
 ## Limites de confianca
 
@@ -51,6 +52,8 @@ python -m tetris_ai.cli.evaluate_agents --episodes 5 --max-pieces 100 --search-d
 
 ## Limitacoes intencionais
 
-O ruleset `planning-v1` nao possui gravidade em tempo real, linhas ocultas, soft drop, tucks, SRS, wall kicks ou T-Spin oficial. A aproximacao de T-Spin existe apenas como opcao desativada. Ainda nao ha adaptador concreto de `gymnasium.Env`, rede neural, algoritmo genetico ou aprendizado por reforco; o contrato de cinco retornos, o espaco fixo e a mascara deixam essa integracao preparada sem acoplar o nucleo a uma biblioteca externa.
+O ruleset `planning-v1` nao possui gravidade em tempo real, linhas ocultas, soft drop, tucks, SRS, wall kicks ou T-Spin oficial. A aproximacao de T-Spin existe apenas como opcao desativada. O algoritmo genetico evolui uma politica linear normalizada com lookahead limitado, mantendo sementes e treinamento fora do nucleo. Ainda nao ha adaptador concreto de `gymnasium.Env`, rede neural ou aprendizado por reforco; o contrato de cinco retornos, o espaco fixo e a mascara deixam essas integracoes preparadas.
+
+Consulte [GENETIC_AGENT.md](GENETIC_AGENT.md) para a formulacao evolutiva, o protocolo de treinamento e as limitacoes.
 
 Consulte [ENVIRONMENT_SPEC.md](ENVIRONMENT_SPEC.md) para a especificacao completa das regras e invariantes.

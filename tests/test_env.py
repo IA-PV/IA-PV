@@ -217,7 +217,7 @@ def test_game_over_and_piece_limit_can_be_true_on_the_same_step() -> None:
     assert terminated and truncated
     assert observation.terminated and observation.truncated
     assert env.termination_reasons == ("game_over", "piece_limit")
-    assert info["reward"]["terminal_penalty"] == -10.0  # type: ignore[index]
+    assert info["reward"]["terminal_penalty"] == config.reward.terminal_penalty  # type: ignore[index]
 
 
 def test_hold_placement_can_rescue_an_otherwise_blocked_piece() -> None:

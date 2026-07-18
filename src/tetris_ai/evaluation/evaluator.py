@@ -20,6 +20,7 @@ class EpisodeResult:
     terminated: bool
     truncated: bool
     config_id: str
+    policy_id: str | None = None
     search_depth: int = 0
     effective_search_depth: int = 0
     beam_width: int = 0
@@ -51,6 +52,7 @@ def evaluate_episode(agent: Agent, seed: int, max_pieces: int = 500) -> EpisodeR
         terminated=env.terminated,
         truncated=env.truncated,
         config_id=env.config.fingerprint,
+        policy_id=decision_metrics["policy_id"],
         search_depth=decision_metrics["search_depth"],
         effective_search_depth=decision_metrics["effective_search_depth"],
         beam_width=decision_metrics["beam_width"],
@@ -61,12 +63,15 @@ def evaluate_episode(agent: Agent, seed: int, max_pieces: int = 500) -> EpisodeR
     )
 
 
-def _decision_metrics_for(agent: Agent) -> dict[str, int | float]:
+def _decision_metrics_for(agent: Agent) -> dict[str, int | float | str | None]:
     metrics_method = getattr(agent, "decision_metrics", None)
-    if not callable(metrics_method):    
+    if not callable(metrics_method):
         return _empty_decision_metrics()
     raw_metrics = metrics_method()
     return {
+        "policy_id": str(raw_metrics["chromosome_id"])
+        if raw_metrics.get("chromosome_id")
+        else None,
         "search_depth": int(raw_metrics.get("search_depth", 0) or 0),
         "effective_search_depth": int(raw_metrics.get("effective_search_depth", 0) or 0),
         "beam_width": int(raw_metrics.get("beam_width", 0) or 0),
@@ -77,8 +82,9 @@ def _decision_metrics_for(agent: Agent) -> dict[str, int | float]:
     }
 
 
-def _empty_decision_metrics() -> dict[str, int | float]:
+def _empty_decision_metrics() -> dict[str, int | float | str | None]:
     return {
+        "policy_id": None,
         "search_depth": 0,
         "effective_search_depth": 0,
         "beam_width": 0,
