@@ -12,11 +12,11 @@ from typing import Literal
 class RewardConfig:
     """Reward terms kept separate from the game score."""
 
-    line_rewards: tuple[float, float, float, float, float] = (0.0, 1.0, 3.0, 5.0, 8.0)
+    line_rewards: tuple[float, float, float, float, float] = (0.0, 10.0, 30.0, 50.0, 80.0)
     holes_delta_weight: float = -0.75
     aggregate_height_delta_weight: float = -0.10
     bumpiness_delta_weight: float = -0.15
-    terminal_penalty: float = -10.0
+    terminal_penalty: float = -100.0
     truncation_penalty: float = 0.0
     enable_shaping: bool = True
 

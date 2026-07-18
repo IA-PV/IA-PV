@@ -10,6 +10,24 @@ Requer Python 3.10 ou superior.
 python -m pip install -e ".[dev]"
 ```
 
+Para usar o agente de aprendizado por reforco baseado em PyTorch, instale o
+extra de RL:
+
+```bash
+python -m pip install -e ".[dev,rl]"
+```
+
+O agente RL usa somente o `DecisionContext` publico e aprende com as
+transicoes retornadas pelo ambiente real. Treine sem abrir o visualizador:
+
+```bash
+python -m tetris_ai.cli.train_rl --steps 100000 --checkpoint results/rl_agent.pt
+```
+
+O aquecimento aleatorio, a mascara de acoes e o replay sao configurados pelo
+comando. O checkpoint gerado pertence ao esquema atual de observacao e acoes;
+checkpoints anteriores a essa integracao nao sao compativeis.
+
 ## Comandos
 
 Execute os testes:
