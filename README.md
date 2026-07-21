@@ -39,10 +39,30 @@ pytest
 Compare o agente aleatorio com o agente baseado em estado, objetivo e busca heuristica:
 
 ```bash
-python -m tetris_ai.cli.evaluate_agents --episodes 5 --max-pieces 100 --search-depth 3 --beam-width 8
+python -m tetris_ai.cli.evaluate_agents --episodes 5 --max-pieces 100 --search-depth 3 --search-strategy greedy
 ```
 
-O CSV e salvo em `results/evaluation.csv` com score, linhas removidas, recompensa, motivo de termino, profundidade efetiva, largura do feixe e nos expandidos.
+O CSV e salvo em `results/evaluation.csv` com score, linhas removidas, recompensa, motivo de termino, profundidade efetiva, estrategia de busca e nos expandidos.
+
+## Agente de busca heuristica
+
+`HeuristicSearchAgent` formula um `TetrisSearchProblem` a cada vez que o
+plano interno acaba. Um estado de busca contem a matriz do tabuleiro, a peca
+corrente, a fila publica de proximas pecas (o unico estado do gerador que o
+agente pode conhecer), o hold e a posicao final da ultima peca travada. Cada
+acao e uma colocacao final `(rotacao, coluna)`, logo seu custo de caminho e
+`g(n) = 1` por peca colocada.
+
+O objetivo e travar a peca atual — e, quando ha lookahead, as pecas visiveis
+planejadas — no menor custo de tabuleiro. A heuristica minimizada e:
+
+```text
+h(n) = 35.6 * buracos + 0.51 * altura_agregada
+```
+
+Use `--search-strategy greedy` para priorizar `h(n)`, ou `--search-strategy
+astar` para priorizar `g(n) + h(n)`. Por padrao, cada planejamento possui um
+orcamento de 2.000 nos; `--max-nodes-expanded 0` remove esse limite.
 
 ## Contrato do ambiente
 
@@ -67,7 +87,7 @@ O agente recebe `DecisionContext`, nao a instancia real de `TetrisEnv`. Simulaco
 Abra uma janela para assistir o agente jogando:
 
 ```bash
-python -m tetris_ai.cli.watch_agent --agent state-goal --seed 0 --max-pieces 500 --search-depth 3 --beam-width 8 --delay-ms 80 --min-delay-ms 18 --level-speed-factor 0.85
+python -m tetris_ai.cli.watch_agent --agent state-goal --seed 0 --max-pieces 500 --search-depth 3 --search-strategy greedy --delay-ms 80 --min-delay-ms 18 --level-speed-factor 0.85
 ```
 
 O visualizador usa o estilo da interface original, com tabuleiro a esquerda, painel lateral, `HOLD`, `NEXT` desenhado, score, level, linhas, ultima jogada e nos expandidos pela busca. A animacao acelera a cada level: `delay = max(min_delay, round(delay_base * fator^(level - 1)))`. Esse tempo pertence somente a apresentacao e nao altera as regras, os agentes, a recompensa ou os resultados do ambiente `planning-v1`.

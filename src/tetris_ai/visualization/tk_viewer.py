@@ -309,7 +309,7 @@ class TetrisTkViewer:
             fill=MUTED,
         )
         self._panel_text(x, y + 60, f"Reward: {self.last_step.reward:.2f}", size=10, fill=MUTED)
-        self._panel_text(x, y + 80, f"Value: {selected_value}", size=10, fill=MUTED)
+        self._panel_text(x, y + 80, f"Objective: {selected_value}", size=10, fill=MUTED)
         self._panel_text(x, y + 100, f"Nodes: {nodes}", size=10, fill=MUTED)
         self._panel_text(x, y + 124, "SPACE pause", size=9, fill=MUTED)
         self._panel_text(x, y + 142, "N passo  R reset", size=9, fill=MUTED)

@@ -1,9 +1,16 @@
 from typing import TYPE_CHECKING
 
 from .base import Agent
-from .heuristic_agent import HeuristicAgent, StateGoalHeuristicAgent, TetrisGoal
+from .heuristic_agent import HeuristicAgent, HeuristicSearchAgent, StateGoalHeuristicAgent, TetrisGoal
 from .q_table_agent import QTableAgent
 from .random_agent import RandomAgent
+from .tetris_search_problem import (
+    PiecePosition,
+    SearchHeuristic,
+    TetrisPlacementGoal,
+    TetrisSearchProblem,
+    TetrisSearchState,
+)
 
 # PyTorch is an optional dependency.  Keeping this import lazy preserves the
 # lightweight core agents for installations that did not request the ``rl``
@@ -14,11 +21,17 @@ if TYPE_CHECKING:
 __all__ = [
     "Agent",
     "HeuristicAgent",
+    "HeuristicSearchAgent",
+    "PiecePosition",
     "RandomAgent",
     "QTableAgent",
     "RLAgent",
+    "SearchHeuristic",
     "StateGoalHeuristicAgent",
     "TetrisGoal",
+    "TetrisPlacementGoal",
+    "TetrisSearchProblem",
+    "TetrisSearchState",
     "TetrisNet",
 ]
 
