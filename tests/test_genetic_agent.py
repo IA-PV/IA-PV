@@ -13,6 +13,8 @@ from tetris_ai.agents import (
 from tetris_ai.agents.genetic_agent import GENE_NAMES, extract_action_features
 from tetris_ai.core.tetromino import PieceType
 from tetris_ai.env import TetrisEnv
+from tetris_ai.evaluation import EpisodeResult
+from tetris_ai.training import genetic_algorithm
 from tetris_ai.training import (
     GeneticAlgorithmConfig,
     GeneticTrainer,
@@ -33,6 +35,18 @@ def _environment_with_current_piece(piece: PieceType) -> TetrisEnv:
         if env.current_piece == piece:
             return env
     raise AssertionError(f"Could not find deterministic seed for piece {piece}.")
+
+
+def test_genetic_defaults_use_screening_then_canonical_validation() -> None:
+    config = GeneticAlgorithmConfig()
+
+    assert config.population_size == 16
+    assert config.generations == 10
+    assert config.episodes_per_individual == 4
+    assert config.validation_episodes == 12
+    assert config.max_pieces == 200
+    assert config.validation_max_pieces == 500
+    assert config.lookahead_beam_width == 2
 
 
 def test_chromosome_has_named_stable_genes() -> None:
@@ -84,6 +98,18 @@ def test_action_features_are_normalized() -> None:
     assert all(0.0 <= value <= 1.0 for value in features.as_tuple())
 
 
+def test_finite_horizon_is_not_encoded_as_game_over() -> None:
+    env = TetrisEnv(seed=3, max_pieces=1)
+    context = env.decision_context()
+    action = next(action for action in context.legal_actions if not action.use_hold)
+
+    features, transition = extract_action_features(context, action)
+
+    assert transition.info["termination_reason"] == "horizon_completed"
+    assert transition.terminated is True
+    assert features.game_over == 0.0
+
+
 def test_hold_features_distinguish_storing_and_retrieving_i_piece() -> None:
     env = _environment_with_current_piece(PieceType.I)
     store_context = env.decision_context()
@@ -108,6 +134,7 @@ def test_training_is_reproducible_with_rotating_and_validation_seeds() -> None:
         episodes_per_individual=1,
         validation_episodes=1,
         max_pieces=5,
+        validation_max_pieces=5,
         elite_count=1,
         tournament_size=2,
         lookahead_depth=1,
@@ -133,6 +160,7 @@ def test_arithmetic_crossover_interpolates_real_valued_genes() -> None:
         episodes_per_individual=1,
         validation_episodes=1,
         max_pieces=1,
+        validation_max_pieces=1,
         elite_count=1,
         tournament_size=2,
         crossover_rate=1.0,
@@ -157,6 +185,7 @@ def test_training_artifact_round_trip(tmp_path: Path) -> None:
         episodes_per_individual=1,
         validation_episodes=1,
         max_pieces=2,
+        validation_max_pieces=2,
         elite_count=1,
         tournament_size=2,
         lookahead_depth=1,
@@ -167,7 +196,13 @@ def test_training_artifact_round_trip(tmp_path: Path) -> None:
 
     payload = json.loads(destination.read_text(encoding="utf-8"))
 
-    assert payload["fitness"] == "mean_total_episode_reward"
+    assert payload["schema_version"] == 3
+    assert payload["fitness"] == "mean_task_return"
+    assert payload["fitness_metric"] == "task_return"
+    assert payload["fitness_shaping_included"] is False
+    assert payload["best_task_return_stddev"] == result.best.task_return_stddev
+    assert payload["training_environment_config"]["max_pieces"] == 2
+    assert payload["validation_environment_config"]["max_pieces"] == 2
     assert payload["training_seed_batches"] == [[4]]
     assert payload["validation_seeds"] == [5]
     assert payload["crossover"] == "arithmetic"
@@ -175,7 +210,8 @@ def test_training_artifact_round_trip(tmp_path: Path) -> None:
     assert load_chromosome(destination) == result.best.chromosome
     assert load_chromosome(destination, generation=0) == result.history[0].best_chromosome
     loaded_model = load_genetic_model(destination)
-    assert loaded_model.policy_config == GeneticPolicyConfig(search_depth=1)
+    assert loaded_model.policy_config == GeneticPolicyConfig(search_depth=1, beam_width=2)
+    assert loaded_model.compatibility_issues() == ()
 
 
 def test_legacy_one_step_model_is_migrated_without_changing_old_weights(
@@ -199,3 +235,41 @@ def test_legacy_one_step_model_is_migrated_without_changing_old_weights(
     for name, value in legacy_genes.items():
         assert model.chromosome.as_dict()[name] == value
     assert model.chromosome.as_dict()["hold_store_i"] == 0.0
+
+
+def test_genetic_fitness_uses_clean_task_return_not_shaped_reward(monkeypatch) -> None:
+    config = GeneticAlgorithmConfig(
+        population_size=2,
+        generations=1,
+        episodes_per_individual=1,
+        validation_episodes=1,
+        max_pieces=1,
+        validation_max_pieces=7,
+        elite_count=1,
+        tournament_size=2,
+        lookahead_depth=1,
+    )
+
+    def fake_episode(agent, seed: int, max_pieces: int) -> EpisodeResult:
+        del agent
+        assert max_pieces == 7
+        return EpisodeResult(
+            seed=seed,
+            agent="GeneticAgent",
+            score=0,
+            lines_removed=0,
+            pieces_placed=1,
+            total_reward=1_000.0 - seed,
+            task_return=float(seed),
+            termination_reason="horizon_completed",
+            terminated=True,
+            truncated=False,
+            config_id="test-config",
+        )
+
+    monkeypatch.setattr(genetic_algorithm, "evaluate_episode", fake_episode)
+
+    evaluation = GeneticTrainer(config).evaluate(_chromosome(), (3, 7))
+
+    assert evaluation.fitness == 5.0
+    assert evaluation.task_return_stddev == pytest.approx(2**0.5 * 2)

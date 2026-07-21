@@ -44,20 +44,22 @@ def test_hold_action_is_an_atomic_search_step() -> None:
     assert env.total_pieces_placed == before_pieces + 1
 
 
-def test_piece_limit_does_not_receive_game_over_penalty() -> None:
+def test_finite_horizon_does_not_receive_game_over_penalty() -> None:
     env = TetrisEnv(seed=0, max_pieces=1)
     action = next(action for action in env.legal_actions() if not action.is_hold)
     observation, _, terminated, truncated, info = env.step(action)
     done = terminated or truncated
     goal = StateGoalHeuristicAgent(search_depth=1).goal
 
-    value_at_piece_limit = goal.evaluate_board(observation, info["termination_reason"])
+    value_at_horizon = goal.evaluate_board(observation, info["termination_reason"])
     value_without_termination = goal.evaluate_board(observation)
     value_at_game_over = goal.evaluate_board(observation, "game_over")
 
     assert done is True
-    assert info["termination_reason"] == "piece_limit"
-    assert value_at_piece_limit == value_without_termination
+    assert terminated is True
+    assert truncated is False
+    assert info["termination_reason"] == "horizon_completed"
+    assert value_at_horizon == value_without_termination
     assert value_at_game_over == value_without_termination - goal.game_over_penalty
 
 
@@ -65,8 +67,10 @@ def test_evaluator_reports_search_metrics_for_agent() -> None:
     result = evaluate_episode(StateGoalHeuristicAgent(search_depth=1), seed=7, max_pieces=5)
     assert result.agent == "StateGoalHeuristicAgent"
     assert result.search_depth == 1
-    assert result.truncated is True
-    assert result.terminated is False
+    assert result.truncated is False
+    assert result.terminated is True
+    assert result.horizon_completed is True
+    assert result.game_over is False
     assert result.config_id
     assert result.decisions_made >= result.pieces_placed
     assert result.nodes_expanded > 0

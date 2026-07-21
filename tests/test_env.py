@@ -7,6 +7,9 @@ from tetris_ai.core.metrics import calculate_metrics
 from tetris_ai.core.tetromino import PieceType
 from tetris_ai.env import (
     Action,
+    CANONICAL_MAX_PIECES,
+    CANONICAL_RULESET_VERSION,
+    EpisodeFinishedError,
     InvalidActionError,
     ScoringConfig,
     TetrisConfig,
@@ -31,6 +34,7 @@ def _set_state(
     env._total_lines_cleared = lines
     env._terminated = False
     env._truncated = False
+    env._terminal_reasons = ()
     env._truncation_reasons = ()
     env._last_metrics = calculate_metrics(env._board)
     env._invalidate_legal_actions()
@@ -42,8 +46,12 @@ def test_reset_is_seeded_and_observation_is_immutable() -> None:
     second, second_info = env.reset(7)
     assert first == second
     assert len(first.next_pieces) == env.config.preview_count
+    assert first.max_pieces == CANONICAL_MAX_PIECES
+    assert first.remaining_pieces == CANONICAL_MAX_PIECES
     assert first_info["config_id"] == second_info["config_id"]
     assert first_info["rng_reseeded"] is True
+    assert first_info["horizon_mode"] == "finite"
+    assert first_info["remaining_pieces"] == CANONICAL_MAX_PIECES
     with pytest.raises(TypeError):
         first.board[0][0] = 1  # type: ignore[index]
 
@@ -145,12 +153,14 @@ def test_score_uses_level_before_the_line_clear() -> None:
         lines=9,
     )
 
-    observation, _, _, _, info = env.step(Action(rotation=1, column=9))
+    observation, reward, _, _, info = env.step(Action(rotation=1, column=9))
 
     assert info["lines_cleared"] == 1
     assert info["level_before"] == 1
     assert observation.level == 2
     assert info["score_gain"] == 100
+    assert reward == 1.0
+    assert info["reward"]["task_reward"] == 1.0  # type: ignore[index]
 
 
 @pytest.mark.parametrize("enabled, expected_score", [(False, 0), (True, 400)])
@@ -190,18 +200,40 @@ def test_back_to_back_survives_no_clear_and_breaks_on_regular_clear() -> None:
     assert env.back_to_back_active is False
 
 
-def test_piece_limit_is_truncation_and_has_no_terminal_penalty() -> None:
+def test_finite_horizon_is_a_true_terminal_with_no_penalty() -> None:
     env = TetrisEnv(max_pieces=1, seed=0)
     action = next(action for action in env.legal_actions() if not action.is_hold)
     observation, _, terminated, truncated, info = env.step(action)
-    assert not terminated and truncated
+    assert terminated and not truncated
     assert observation.done
-    assert env.termination_reason == "piece_limit"
+    assert observation.remaining_pieces == 0
+    assert not any(observation.action_mask)
+    assert env.termination_reason == "horizon_completed"
+    assert info["remaining_pieces"] == 0
     assert info["reward"]["terminal_penalty"] == 0.0  # type: ignore[index]
     assert info["reward"]["truncation_penalty"] == 0.0  # type: ignore[index]
+    with pytest.raises(EpisodeFinishedError):
+        env.step(action)
 
 
-def test_game_over_and_piece_limit_can_be_true_on_the_same_step() -> None:
+def test_external_time_limit_preserves_bootstrap_actions_but_prohibits_step() -> None:
+    env = TetrisEnv(max_pieces=1, horizon_mode="time_limit", seed=0)
+    action = next(action for action in env.legal_actions() if not action.is_hold)
+
+    observation, _, terminated, truncated, info = env.step(action)
+
+    assert not terminated and truncated
+    assert env.termination_reason == "piece_limit"
+    assert info["horizon_mode"] == "time_limit"
+    assert env.legal_actions()
+    legal_ids = {legal.to_id(env.width) for legal in env.legal_actions()}
+    masked_ids = {index for index, enabled in enumerate(observation.action_mask) if enabled}
+    assert legal_ids == masked_ids
+    with pytest.raises(EpisodeFinishedError):
+        env.step(env.legal_actions()[0])
+
+
+def test_game_over_and_finite_horizon_can_coexist_on_the_same_step() -> None:
     config = TetrisConfig(width=5, height=4, max_pieces=1, preview_count=2, allow_hold=False)
     env = TetrisEnv(config=config, seed=0)
     board = (
@@ -214,10 +246,24 @@ def test_game_over_and_piece_limit_can_be_true_on_the_same_step() -> None:
 
     observation, _, terminated, truncated, info = env.step(Action(rotation=0, column=0))
 
-    assert terminated and truncated
-    assert observation.terminated and observation.truncated
-    assert env.termination_reasons == ("game_over", "piece_limit")
+    assert terminated and not truncated
+    assert observation.terminated and not observation.truncated
+    assert env.termination_reasons == ("game_over", "horizon_completed")
     assert info["reward"]["terminal_penalty"] == config.reward.terminal_penalty  # type: ignore[index]
+
+
+def test_public_preview_exhaustion_remains_a_truncation() -> None:
+    env = TetrisEnv(max_pieces=5, seed=0)
+    _set_state(env, current=PieceType.O, preview=())
+    action = next(action for action in env.legal_actions() if not action.is_hold)
+
+    observation, _, terminated, truncated, info = env.step(action)
+
+    assert not terminated and truncated
+    assert observation.truncated
+    assert env.termination_reason == "preview_horizon"
+    assert not env.legal_actions()
+    assert info["termination_reasons"] == ("preview_horizon",)
 
 
 def test_hold_placement_can_rescue_an_otherwise_blocked_piece() -> None:
@@ -253,5 +299,11 @@ def test_config_validation_and_fingerprint_are_stable() -> None:
     first = TetrisConfig()
     second = TetrisConfig()
     assert first.fingerprint == second.fingerprint
+    assert first.max_pieces == CANONICAL_MAX_PIECES
+    assert first.ruleset_version == CANONICAL_RULESET_VERSION
+    assert first.horizon_mode == "finite"
+    assert first.fingerprint != TetrisConfig(horizon_mode="time_limit").fingerprint
     with pytest.raises(ValueError):
         TetrisConfig(preview_count=0)
+    with pytest.raises(ValueError):
+        TetrisConfig(horizon_mode="invalid")  # type: ignore[arg-type]
