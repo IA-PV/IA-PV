@@ -1,0 +1,309 @@
+{
+  "agent": "GeneticAgent",
+  "best_chromosome": {
+    "aggregate_height": -0.25338083415596707,
+    "bumpiness": -0.26179154894261236,
+    "game_over": 0.31399664187658666,
+    "hold_retrieve_i": 0.16646044287010137,
+    "hold_store_i": 0.09065354278887847,
+    "holes": -0.6103837157189205,
+    "i_well_match": 0.06901888007368379,
+    "lines_cleared": 0.4410772652778568,
+    "max_height": 0.011552355097932612,
+    "use_hold": -0.40090872494800156
+  },
+  "best_chromosome_id": "6239c10972d28761",
+  "best_fitness": 37.63750000000002,
+  "best_mean_lines": 38.25,
+  "best_mean_pieces": 100.0,
+  "best_mean_score": 9900.0,
+  "best_reward_stddev": 2.757527576169147,
+  "config": {
+    "crossover_rate": 0.9,
+    "elite_count": 2,
+    "episodes_per_individual": 2,
+    "generations": 6,
+    "initial_gene_max": 1.0,
+    "initial_gene_min": -1.0,
+    "lookahead_beam_width": 2,
+    "lookahead_depth": 2,
+    "lookahead_discount": 0.95,
+    "max_pieces": 100,
+    "mutation_rate": 0.15,
+    "mutation_stddev": 0.25,
+    "population_size": 10,
+    "seed": 0,
+    "tournament_size": 3,
+    "validation_episodes": 4
+  },
+  "crossover": "arithmetic",
+  "environment_config": {
+    "allow_hold": true,
+    "height": 20,
+    "max_pieces": 100,
+    "observation_mode": "featured",
+    "preview_count": 5,
+    "reward": {
+      "aggregate_height_delta_weight": -0.1,
+      "bumpiness_delta_weight": -0.15,
+      "enable_shaping": true,
+      "holes_delta_weight": -0.75,
+      "line_rewards": [
+        0.0,
+        1.0,
+        3.0,
+        5.0,
+        8.0
+      ],
+      "terminal_penalty": -10.0,
+      "truncation_penalty": 0.0
+    },
+    "ruleset_version": "planning-v1",
+    "scoring": {
+      "approximate_t_spin_scores": [
+        400,
+        800,
+        1200,
+        1600,
+        1600
+      ],
+      "back_to_back_multiplier": 1.5,
+      "enable_approximate_t_spins": false,
+      "line_clear_scores": [
+        0,
+        100,
+        300,
+        500,
+        800
+      ]
+    },
+    "width": 10
+  },
+  "environment_config_id": "c400fe0d5558303d",
+  "fitness": "mean_total_episode_reward",
+  "gene_order": [
+    "lines_cleared",
+    "aggregate_height",
+    "holes",
+    "bumpiness",
+    "max_height",
+    "game_over",
+    "use_hold",
+    "hold_store_i",
+    "hold_retrieve_i",
+    "i_well_match"
+  ],
+  "history": [
+    {
+      "best_chromosome": {
+        "aggregate_height": -0.06260001939674244,
+        "bumpiness": -0.21649995106044742,
+        "game_over": 0.5207607651860515,
+        "hold_retrieve_i": 0.24852280907649113,
+        "hold_store_i": 0.061681802134532455,
+        "holes": -0.5047834627014972,
+        "i_well_match": 0.05707817619993154,
+        "lines_cleared": 0.36476810169095697,
+        "max_height": 0.009553724417145283,
+        "use_hold": -0.4703591168274179
+      },
+      "best_chromosome_id": "ba47ef004fd2ba31",
+      "best_fitness": 35.10000000000002,
+      "best_mean_lines": 38.0,
+      "best_mean_pieces": 100.0,
+      "best_mean_score": 9350.0,
+      "generation": 0,
+      "mean_fitness": -95.125,
+      "training_seeds": [
+        0,
+        1
+      ],
+      "worst_fitness": -134.5
+    },
+    {
+      "best_chromosome": {
+        "aggregate_height": -0.06260001939674244,
+        "bumpiness": -0.21649995106044742,
+        "game_over": 0.5207607651860515,
+        "hold_retrieve_i": 0.24852280907649113,
+        "hold_store_i": 0.061681802134532455,
+        "holes": -0.5047834627014972,
+        "i_well_match": 0.05707817619993154,
+        "lines_cleared": 0.36476810169095697,
+        "max_height": 0.009553724417145283,
+        "use_hold": -0.4703591168274179
+      },
+      "best_chromosome_id": "ba47ef004fd2ba31",
+      "best_fitness": 29.32500000000001,
+      "best_mean_lines": 36.0,
+      "best_mean_pieces": 100.0,
+      "best_mean_score": 8450.0,
+      "generation": 1,
+      "mean_fitness": -15.394999999999996,
+      "training_seeds": [
+        2,
+        3
+      ],
+      "worst_fitness": -75.69999999999999
+    },
+    {
+      "best_chromosome": {
+        "aggregate_height": -0.06260001939674244,
+        "bumpiness": -0.21649995106044742,
+        "game_over": 0.5207607651860515,
+        "hold_retrieve_i": 0.24852280907649113,
+        "hold_store_i": 0.061681802134532455,
+        "holes": -0.5047834627014972,
+        "i_well_match": 0.05707817619993154,
+        "lines_cleared": 0.36476810169095697,
+        "max_height": 0.009553724417145283,
+        "use_hold": -0.4703591168274179
+      },
+      "best_chromosome_id": "ba47ef004fd2ba31",
+      "best_fitness": 34.275000000000006,
+      "best_mean_lines": 37.5,
+      "best_mean_pieces": 100.0,
+      "best_mean_score": 9200.0,
+      "generation": 2,
+      "mean_fitness": 26.887500000000006,
+      "training_seeds": [
+        4,
+        5
+      ],
+      "worst_fitness": -5.9249999999999945
+    },
+    {
+      "best_chromosome": {
+        "aggregate_height": -0.19612711795253454,
+        "bumpiness": -0.26539164168930396,
+        "game_over": 0.3183146461722609,
+        "hold_retrieve_i": 0.17614283510058545,
+        "hold_store_i": 0.07561126296175409,
+        "holes": -0.6187775618783321,
+        "i_well_match": 0.06996801067221398,
+        "lines_cleared": 0.4471428509312939,
+        "max_height": 0.011711220233049675,
+        "use_hold": -0.4064219227521334
+      },
+      "best_chromosome_id": "9af4c202d777601d",
+      "best_fitness": 36.775000000000006,
+      "best_mean_lines": 37.5,
+      "best_mean_pieces": 100.0,
+      "best_mean_score": 9900.0,
+      "generation": 3,
+      "mean_fitness": 13.122500000000008,
+      "training_seeds": [
+        6,
+        7
+      ],
+      "worst_fitness": -67.325
+    },
+    {
+      "best_chromosome": {
+        "aggregate_height": -0.14990813868802738,
+        "bumpiness": -0.25478818604747855,
+        "game_over": 0.40848941238938674,
+        "hold_retrieve_i": 0.10110644578455914,
+        "hold_store_i": 0.08741748504258358,
+        "holes": -0.5940549278580226,
+        "i_well_match": 0.06717250930379433,
+        "lines_cleared": 0.42927770885210226,
+        "max_height": 0.01124331022856593,
+        "use_hold": -0.43135070817186466
+      },
+      "best_chromosome_id": "2068ff721b04fae9",
+      "best_fitness": 41.75,
+      "best_mean_lines": 38.5,
+      "best_mean_pieces": 100.0,
+      "best_mean_score": 10600.0,
+      "generation": 4,
+      "mean_fitness": 29.890000000000008,
+      "training_seeds": [
+        8,
+        9
+      ],
+      "worst_fitness": -2.4999999999999942
+    },
+    {
+      "best_chromosome": {
+        "aggregate_height": -0.25338083415596707,
+        "bumpiness": -0.26179154894261236,
+        "game_over": 0.31399664187658666,
+        "hold_retrieve_i": 0.16646044287010137,
+        "hold_store_i": 0.09065354278887847,
+        "holes": -0.6103837157189205,
+        "i_well_match": 0.06901888007368379,
+        "lines_cleared": 0.4410772652778568,
+        "max_height": 0.011552355097932612,
+        "use_hold": -0.40090872494800156
+      },
+      "best_chromosome_id": "6239c10972d28761",
+      "best_fitness": 35.900000000000006,
+      "best_mean_lines": 38.0,
+      "best_mean_pieces": 100.0,
+      "best_mean_score": 9500.0,
+      "generation": 5,
+      "mean_fitness": 19.80500000000001,
+      "training_seeds": [
+        10,
+        11
+      ],
+      "worst_fitness": -37.67499999999998
+    }
+  ],
+  "model_selection": "generation_elites_on_held_out_validation_seeds",
+  "policy": "normalized_linear_beam_search",
+  "policy_config": {
+    "beam_width": 2,
+    "discount_factor": 0.95,
+    "search_depth": 2
+  },
+  "schema_version": 2,
+  "training_seed_batches": [
+    [
+      0,
+      1
+    ],
+    [
+      2,
+      3
+    ],
+    [
+      4,
+      5
+    ],
+    [
+      6,
+      7
+    ],
+    [
+      8,
+      9
+    ],
+    [
+      10,
+      11
+    ]
+  ],
+  "training_seeds": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11
+  ],
+  "validation_candidate_count": 7,
+  "validation_seeds": [
+    12,
+    13,
+    14,
+    15
+  ]
+}
