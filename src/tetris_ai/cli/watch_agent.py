@@ -3,14 +3,24 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from ..agents import QTableAgent, RandomAgent, StateGoalHeuristicAgent
+from ..agents import (
+    GeneticAgent,
+    QTableAgent,
+    RandomAgent,
+    StateGoalHeuristicAgent,
+    load_genetic_model,
+)
 from ..env import TetrisEnv
 from ..visualization import TetrisTkViewer
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Open a graphical viewer and watch a Tetris agent play.")
-    parser.add_argument("--agent", choices=("state-goal", "random", "rl", "q-table"), default="state-goal")
+    parser.add_argument(
+        "--agent",
+        choices=("state-goal", "genetic", "random", "rl", "q-table"),
+        default="state-goal",
+    )
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--max-pieces", type=int, default=500)
     parser.add_argument("--search-depth", type=int, default=3)
@@ -20,6 +30,22 @@ def main() -> None:
         type=int,
         default=2_000,
         help="Per-plan expansion budget; use 0 for an exhaustive search.",
+    )
+    parser.add_argument(
+        "--beam-width",
+        type=int,
+        default=None,
+        help="Deprecated compatibility option for older heuristic-agent commands.",
+    )
+    parser.add_argument(
+        "--genetic-model",
+        type=Path,
+        help="JSON model produced by train_genetic_agent (required for --agent genetic).",
+    )
+    parser.add_argument(
+        "--genetic-generation",
+        type=int,
+        help="Watch the best chromosome from this recorded generation instead of the final best.",
     )
     parser.add_argument("--delay-ms", type=int, default=80, help="Base delay per rendered row at level 1.")
     parser.add_argument("--min-delay-ms", type=int, default=18, help="Minimum delay per rendered row.")
@@ -49,6 +75,8 @@ def main() -> None:
         parser.error("--max-pieces and --search-depth must be positive.")
     if args.max_nodes_expanded < 0:
         parser.error("--max-nodes-expanded must be non-negative.")
+    if args.beam_width is not None and args.beam_width <= 0:
+        parser.error("--beam-width must be positive.")
     if args.rl_train_episodes < 0:
         parser.error("--rl-train-episodes cannot be negative.")
     if args.q_table_train_episodes < 0:
@@ -59,6 +87,8 @@ def main() -> None:
         parser.error("--min-delay-ms must not exceed --delay-ms.")
     if not 0.0 < args.level_speed_factor <= 1.0:
         parser.error("--level-speed-factor must be greater than 0 and at most 1.")
+    if args.genetic_generation is not None and args.agent != "genetic":
+        parser.error("--genetic-generation is only valid with --agent genetic.")
 
     env = TetrisEnv(max_pieces=args.max_pieces, seed=args.seed)
     if args.agent == "random":
@@ -68,7 +98,22 @@ def main() -> None:
             search_depth=args.search_depth,
             search_strategy=args.search_strategy,
             max_nodes_expanded=args.max_nodes_expanded or None,
+            beam_width=args.beam_width,
         )
+    elif args.agent == "genetic":
+        if args.genetic_model is None:
+            parser.error("--genetic-model is required when --agent genetic is selected.")
+        try:
+            genetic_model = load_genetic_model(
+                args.genetic_model,
+                generation=args.genetic_generation,
+            )
+            agent = GeneticAgent(
+                genetic_model.chromosome,
+                genetic_model.policy_config,
+            )
+        except ValueError as error:
+            parser.error(str(error))
     elif args.agent == "rl":
         # Keep PyTorch optional for users who only run the heuristic agents.
         from ..agents.rl_agent import RLAgent
