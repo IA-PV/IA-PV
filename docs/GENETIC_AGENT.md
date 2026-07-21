@@ -4,7 +4,7 @@
 
 Este repositorio usa o **Contexto I — ambiente proprio** do enunciado. Portanto, o vetor
 de 128 bytes da RAM do Atari, exclusivo do Contexto II/PettingZoo, nao faz parte desta
-solucao. O terceiro agente aprende no mesmo ambiente `planning-v1` usado pelos agentes
+solução. O terceiro agente aprende no mesmo ambiente `planning-v2` usado pelos agentes
 aleatorio e de busca heuristica.
 
 ## Formulacao computacional
@@ -13,10 +13,16 @@ aleatorio e de busca heuristica.
   metricas publicas do tabuleiro.
 - **Acao:** uma colocacao legal final, formada por rotacao, coluna e uso opcional do
   hold. Uma acao sempre trava exatamente uma peca.
-- **Objetivo:** maximizar a recompensa total obtida durante um episodio.
-- **Recompensa:** e definida pelo ambiente e combina linhas removidas com variacoes de
-  buracos, altura e irregularidade; game over recebe penalidade separada.
-- **Aptidao (fitness):** media da soma das recompensas de episodios completos.
+- **Objetivo:** maximizar a utilidade canônica de linhas removidas.
+- **Recompensa de tarefa:** `(0, 1, 3, 5, 8)` para zero a quatro linhas; sem
+  penalidade terminal ou shaping.
+- **Aptidão (fitness):** média do `task_return` em episódios completos. Score,
+  sobrevivência e métricas do tabuleiro são reportados, mas não misturados ao fitness.
+
+O algoritmo genético não usa o preset PBRS dos agentes de RL. Seus dez genes já
+fornecem uma função densa para escolher ações; repetir essas heurísticas na aptidão
+introduziria um segundo objetivo e favoreceria artificialmente sua própria família de
+políticas.
 
 ## Cromossomo e politica
 
@@ -98,36 +104,56 @@ fonte de exploracao local.
 Treino rapido para validar a instalacao:
 
 ```bash
-python -m tetris_ai.cli.train_genetic_agent --population-size 6 --generations 2 --episodes-per-individual 1 --validation-episodes 2 --max-pieces 30 --lookahead-depth 1
+python -m tetris_ai.cli.train_genetic_agent --population-size 6 --generations 2 --episodes-per-individual 1 --validation-episodes 2 --max-pieces 30 --lookahead-depth 1 --workers 0
 ```
 
 Treino padrao com lookahead:
 
 ```bash
-python -m tetris_ai.cli.train_genetic_agent --population-size 24 --generations 20 --episodes-per-individual 3 --validation-episodes 8 --max-pieces 200 --lookahead-depth 2 --lookahead-beam-width 4 --lookahead-discount 0.95 --seed 0
+python -m tetris_ai.cli.train_genetic_agent --population-size 16 --generations 10 --episodes-per-individual 4 --validation-episodes 12 --max-pieces 200 --lookahead-depth 2 --lookahead-beam-width 2 --lookahead-discount 0.95 --seed 0 --workers 0
 ```
+
+No treino, cada processo avalia um cromossomo completo no mesmo lote de
+sementes da geracao. A ordem devolvida pelo pool e preservada, portanto
+desempates, selecao, crossover e mutacao produzem o mesmo resultado da execucao
+serial para a mesma configuracao e semente. `--workers 1` executa em serie,
+`--workers 0` usa automaticamente todos os processadores logicos menos um e um
+valor como `--workers 4` define um limite explicito.
 
 Comparacao em sementes nao usadas no treino nem na validacao:
 
 ```bash
-python -m tetris_ai.cli.evaluate_agents --episodes 20 --seed 1000 --max-pieces 200 --genetic-model results/genetic_agent.json
+python -m tetris_ai.cli.evaluate_agents --episodes 50 --seed 1000000 --max-pieces 500 --search-depth 3 --beam-width 8 --genetic-model reports/genetic_agent/<run_id>/model.json --workers 0
 ```
+
+Esse comando executa os agentes aleatorio, de estado/objetivo/busca e genetico
+nas mesmas sementes. Cada par agente/semente forma uma tarefa independente. Os
+workers nunca escrevem relatorios; o processo principal ordena os resultados e
+publica todos os artefatos somente depois da conclusao das partidas.
+
+Os relatorios de comparacao preservam cada episodio, exibem media com intervalo
+de confiança de 95% e calculam diferenças pareadas de `task_return` nas mesmas
+sementes. Matplotlib gera SVG vetorial e PNG em 300 DPI com backend headless;
+CSV e JSON continuam sendo as fontes canonicas.
 
 Visualizacao:
 
 ```bash
-python -m tetris_ai.cli.watch_agent --agent genetic --genetic-model results/genetic_agent.json --seed 1000
+python -m tetris_ai.cli.watch_agent --agent genetic --genetic-model reports/genetic_agent/<run_id>/model.json --seed 1000000
 ```
 
 Para demonstrar um estagio inicial, selecione uma geracao registrada:
 
 ```bash
-python -m tetris_ai.cli.watch_agent --agent genetic --genetic-model results/genetic_agent.json --genetic-generation 0 --seed 1000
+python -m tetris_ai.cli.watch_agent --agent genetic --genetic-model reports/genetic_agent/<run_id>/model.json --genetic-generation 0 --seed 1000000
 ```
 
 ## Hiperparametros principais
 
 - `episodes_per_individual`: tamanho do lote de treino de cada geracao.
+- `max_pieces`: horizonte prático usado durante a evolução (padrão 200).
+- `validation_max_pieces`: horizonte canônico usado para reranking dos finalistas
+  (padrão 500).
 - `validation_episodes`: partidas separadas usadas para escolher o modelo final.
 - `lookahead_depth`: quantidade maxima de colocacoes planejadas.
 - `lookahead_beam_width`: planos parciais continuados em cada nivel.
@@ -135,22 +161,27 @@ python -m tetris_ai.cli.watch_agent --agent genetic --genetic-model results/gene
 - `population_size` e `generations`: capacidade e duracao da evolucao.
 - `mutation_rate` e `mutation_stddev`: frequencia e intensidade da exploracao.
 - `elite_count` e `tournament_size`: preservacao e pressao seletiva.
+- `workers`: paralelismo de execucao; nao altera politica, sementes ou fitness.
 
 ## Protocolo recomendado para o relatorio e o video
 
-- Preserve o JSON, que registra configuracao, lotes de treino, sementes de validacao,
-  politica de busca, cromossomo e metricas.
+- Preserve a pasta completa do relatorio. O JSON registra configuracao, lotes de
+  treino, sementes de validacao, politica de busca, cromossomo e metricas; CSV,
+  SVG e PNG permitem auditoria tabular e visual.
 - Reserve sementes externas para o teste final; nao escolha hiperparametros pelos
   resultados de teste.
 - Compare genetico, busca heuristica e aleatorio nas mesmas sementes.
-- Reporte media e dispersao de recompensa, score, linhas e pecas colocadas, alem da
-  curva de fitness por geracao. O CSV preserva os resultados individuais.
+- Reporte média e dispersão de `task_return`, score, linhas e peças colocadas, taxas
+  de game over/conclusão do horizonte, latência e curva de fitness por geração. O CSV
+  preserva os resultados individuais.
 - Compare uma geracao inicial, o modelo final e situacoes de falha no visualizador.
 
 ## Compatibilidade e limitacoes
 
-Artefatos antigos de sete genes continuam carregando: os tres novos genes recebem peso
-zero e a profundidade permanece 1, reproduzindo a politica anterior.
+Artefatos antigos de sete genes continuam carregando: os três novos genes recebem peso
+zero e a profundidade permanece 1, reproduzindo a política anterior. Isso é
+compatibilidade mecânica, não compatibilidade experimental: um cromossomo selecionado
+por fitness antigo deve ser tratado como baseline e retreinado sob `planning-v2`.
 
 A politica ainda e linear, e beam search nao garante o plano globalmente otimo. Os
 genes contextuais de hold focam a estrategia comum da peca I, mas nao representam todas
