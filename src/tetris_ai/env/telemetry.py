@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import TypedDict
 
+from .config import HorizonMode
+
 
 class ResetInfo(TypedDict):
     seed: int | None
@@ -11,6 +13,9 @@ class ResetInfo(TypedDict):
     ruleset_version: str
     config_id: str
     config: dict[str, object]
+    horizon_mode: HorizonMode
+    max_pieces: int
+    remaining_pieces: int
     state_hash: str
 
 
@@ -32,6 +37,9 @@ class StepInfo(TypedDict):
     board_metrics_after: dict[str, int | tuple[int, ...]]
     legal_action_count: int
     reward: dict[str, float]
+    horizon_mode: HorizonMode
+    max_pieces: int
+    remaining_pieces: int
     terminated: bool
     truncated: bool
     termination_reason: str | None

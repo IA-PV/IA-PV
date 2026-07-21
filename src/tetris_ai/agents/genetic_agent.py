@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from hashlib import sha256
 import json
 from math import isfinite
@@ -11,6 +11,7 @@ from pathlib import Path
 
 from ..core.tetromino import PieceType
 from ..env.action import Action
+from ..env.config import CANONICAL_RULESET_VERSION
 from ..env.context import DecisionContext, SimulatedTransition
 from .base import Agent
 
@@ -103,7 +104,29 @@ class GeneticModel:
 
     chromosome: LinearChromosome
     policy_config: GeneticPolicyConfig = field(default_factory=GeneticPolicyConfig)
-    schema_version: int = 2
+    schema_version: int = 3
+    fitness_metric: str | None = None
+    ruleset_version: str | None = None
+    environment_config_id: str | None = None
+
+    def compatibility_issues(
+        self,
+        ruleset_version: str = CANONICAL_RULESET_VERSION,
+    ) -> tuple[str, ...]:
+        """Explain why this artifact is only a legacy baseline, if applicable."""
+
+        issues: list[str] = []
+        if self.schema_version < 3:
+            issues.append(f"model schema {self.schema_version} predates planning-v2 metadata")
+        if self.fitness_metric != "task_return":
+            issues.append(
+                f"fitness metric is {self.fitness_metric or 'unknown'}, not task_return"
+            )
+        if self.ruleset_version != ruleset_version:
+            issues.append(
+                f"ruleset is {self.ruleset_version or 'unknown'}, not {ruleset_version}"
+            )
+        return tuple(issues)
 
 
 @dataclass(frozen=True)
@@ -169,13 +192,19 @@ def extract_action_features(
         metrics.column_heights,
         board_height=height,
     )
+    termination_reason = transition.info.get("termination_reason")
+    termination_reasons = (
+        set(str(termination_reason).split("+")) if termination_reason else set()
+    )
     features = ActionFeatures(
         lines_cleared=float(transition.info.get("lines_cleared", 0)) / 4.0,
         aggregate_height=metrics.aggregate_height / board_area,
         holes=metrics.holes / board_area,
         bumpiness=metrics.bumpiness / max_bumpiness,
         max_height=metrics.max_height / height,
-        game_over=float(transition.terminated),
+        # `terminated` also covers completion of the finite experiment
+        # horizon in planning-v2.  This gene models top-out only.
+        game_over=float("game_over" in termination_reasons),
         use_hold=float(action.use_hold),
         hold_store_i=float(action.use_hold and before.current_piece == PieceType.I),
         hold_retrieve_i=float(action.use_hold and before.hold_piece == PieceType.I),
@@ -223,6 +252,14 @@ class GeneticAgent(Agent):
         self.last_nodes_expanded = 0
         self.last_selected_value: float | None = None
         self.last_plan: tuple[Action, ...] = ()
+
+    def configuration(self) -> dict[str, object]:
+        return {
+            "policy": "normalized_linear_beam_search",
+            "policy_config": asdict(self.policy_config),
+            "chromosome_id": self.chromosome.fingerprint,
+            "chromosome": self.chromosome.as_dict(),
+        }
 
     def select_action(self, context: DecisionContext) -> Action:
         if not context.legal_actions:
@@ -340,7 +377,43 @@ def load_genetic_model(
     schema_version = payload.get("schema_version", 1)
     if not isinstance(schema_version, int):
         raise ValueError("Genetic model 'schema_version' must be an integer.")
-    return GeneticModel(chromosome, policy_config, schema_version)
+    if schema_version not in (1, 2, 3):
+        raise ValueError(
+            f"Unsupported genetic model schema_version {schema_version}; expected 1, 2, or 3."
+        )
+
+    raw_fitness_metric = payload.get("fitness_metric")
+    if raw_fitness_metric is None:
+        fitness_definition = payload.get("fitness")
+        raw_fitness_metric = (
+            "task_return"
+            if fitness_definition == "mean_task_return"
+            else "total_reward"
+            if fitness_definition == "mean_total_episode_reward"
+            else None
+        )
+    if raw_fitness_metric is not None and not isinstance(raw_fitness_metric, str):
+        raise ValueError("Genetic model 'fitness_metric' must be a string.")
+
+    raw_environment = payload.get("environment_config")
+    ruleset_version = None
+    if isinstance(raw_environment, dict):
+        raw_ruleset = raw_environment.get("ruleset_version")
+        if raw_ruleset is not None and not isinstance(raw_ruleset, str):
+            raise ValueError("Genetic model ruleset_version must be a string.")
+        ruleset_version = raw_ruleset
+    environment_config_id = payload.get("environment_config_id")
+    if environment_config_id is not None and not isinstance(environment_config_id, str):
+        raise ValueError("Genetic model 'environment_config_id' must be a string.")
+
+    return GeneticModel(
+        chromosome=chromosome,
+        policy_config=policy_config,
+        schema_version=schema_version,
+        fitness_metric=raw_fitness_metric,
+        ruleset_version=ruleset_version,
+        environment_config_id=environment_config_id,
+    )
 
 
 def load_chromosome(

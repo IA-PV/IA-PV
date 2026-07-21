@@ -15,6 +15,8 @@ class Observation:
     level: int
     total_lines_cleared: int
     total_pieces_placed: int
+    max_pieces: int
+    remaining_pieces: int
     back_to_back_active: bool
     terminated: bool
     truncated: bool

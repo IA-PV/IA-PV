@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 
 from ..env.action import Action
 from ..env.context import DecisionContext
@@ -36,8 +36,17 @@ class TetrisGoal:
             - self.bumpiness_penalty * metrics.bumpiness
             - self.unsafe_height_penalty * unsafe_height
         )
+        # A finite experimental horizon is a terminal MDP state, but it is not
+        # a loss in Tetris.  Only an actual top-out receives the game-over
+        # penalty; otherwise every policy would learn/search against completing
+        # the agreed evaluation budget.
         reasons = set(termination_reason.split("+")) if termination_reason else set()
-        if observation.terminated or "game_over" in reasons:
+        unambiguous_top_out = (
+            termination_reason is None
+            and observation.terminated
+            and observation.remaining_pieces > 0
+        )
+        if "game_over" in reasons or unambiguous_top_out:
             value -= self.game_over_penalty
         return value
 
@@ -112,6 +121,14 @@ class StateGoalHeuristicAgent(Agent):
         self.goal = goal or TetrisGoal()
         self.beam_width = beam_width
         self.state = AgentState()
+
+    def configuration(self) -> dict[str, object]:
+        return {
+            "policy": "state_goal_beam_search",
+            "search_depth": self.search_depth,
+            "beam_width": self.beam_width,
+            "goal": asdict(self.goal),
+        }
 
     def select_action(self, context: DecisionContext) -> Action:
         effective_depth = self._effective_search_depth(context.observation.level)

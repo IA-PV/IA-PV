@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import asdict, dataclass
 import json
 from math import sqrt
@@ -18,17 +19,19 @@ from ..agents.genetic_agent import (
 )
 from ..env import TetrisConfig
 from ..evaluation import evaluate_episode
+from ..execution import resolve_worker_count
 
 
 @dataclass(frozen=True)
 class GeneticAlgorithmConfig:
     """Hyperparameters and experiment controls for one training run."""
 
-    population_size: int = 24
-    generations: int = 20
-    episodes_per_individual: int = 3
-    validation_episodes: int = 8
+    population_size: int = 16
+    generations: int = 10
+    episodes_per_individual: int = 4
+    validation_episodes: int = 12
     max_pieces: int = 200
+    validation_max_pieces: int = 500
     elite_count: int = 2
     tournament_size: int = 3
     crossover_rate: float = 0.90
@@ -37,7 +40,7 @@ class GeneticAlgorithmConfig:
     initial_gene_min: float = -1.0
     initial_gene_max: float = 1.0
     lookahead_depth: int = 2
-    lookahead_beam_width: int = 4
+    lookahead_beam_width: int = 2
     lookahead_discount: float = 0.95
     seed: int = 0
 
@@ -48,8 +51,8 @@ class GeneticAlgorithmConfig:
             raise ValueError("generations and episodes_per_individual must be positive.")
         if self.validation_episodes <= 0:
             raise ValueError("validation_episodes must be positive.")
-        if self.max_pieces <= 0:
-            raise ValueError("max_pieces must be positive.")
+        if self.max_pieces <= 0 or self.validation_max_pieces <= 0:
+            raise ValueError("max_pieces and validation_max_pieces must be positive.")
         if not 1 <= self.elite_count < self.population_size:
             raise ValueError("elite_count must be between 1 and population_size - 1.")
         if not 2 <= self.tournament_size <= self.population_size:
@@ -96,11 +99,17 @@ class GeneticAlgorithmConfig:
 class FitnessEvaluation:
     chromosome: LinearChromosome
     fitness: float
-    reward_stddev: float
+    task_return_stddev: float
     mean_score: float
     mean_lines: float
     mean_pieces: float
     episode_seeds: tuple[int, ...]
+
+    @property
+    def reward_stddev(self) -> float:
+        """Compatibility alias for report consumers created before schema v3."""
+
+        return self.task_return_stddev
 
 
 @dataclass(frozen=True)
@@ -125,20 +134,27 @@ class TrainingResult:
     validation_candidate_count: int
 
     def as_dict(self) -> dict[str, object]:
-        environment_config = TetrisConfig(max_pieces=self.config.max_pieces)
+        training_environment = TetrisConfig(max_pieces=self.config.max_pieces)
+        validation_environment = TetrisConfig(
+            max_pieces=self.config.validation_max_pieces
+        )
         return {
-            "schema_version": 2,
+            "schema_version": 3,
             "agent": "GeneticAgent",
             "policy": "normalized_linear_beam_search",
             "policy_config": asdict(self.config.policy_config),
-            "fitness": "mean_total_episode_reward",
+            "fitness": "mean_task_return",
+            "fitness_metric": "task_return",
+            "fitness_shaping_included": False,
             "model_selection": "generation_elites_on_held_out_validation_seeds",
             "crossover": "arithmetic",
             "gene_order": list(GENE_NAMES),
             "best_chromosome": self.best.chromosome.as_dict(),
             "best_chromosome_id": self.best.chromosome.fingerprint,
             "best_fitness": self.best.fitness,
-            "best_reward_stddev": self.best.reward_stddev,
+            "best_task_return_stddev": self.best.task_return_stddev,
+            # Compatibility alias for schema-v2 report consumers.
+            "best_reward_stddev": self.best.task_return_stddev,
             "best_mean_score": self.best.mean_score,
             "best_mean_lines": self.best.mean_lines,
             "best_mean_pieces": self.best.mean_pieces,
@@ -153,8 +169,14 @@ class TrainingResult:
             ],
             "validation_seeds": list(self.config.validation_seeds),
             "validation_candidate_count": self.validation_candidate_count,
-            "environment_config_id": environment_config.fingerprint,
-            "environment_config": environment_config.as_dict(),
+            # Compatibility keys refer to the held-out environment that
+            # produced best_fitness and the serialized final chromosome.
+            "environment_config_id": validation_environment.fingerprint,
+            "environment_config": validation_environment.as_dict(),
+            "training_environment_config_id": training_environment.fingerprint,
+            "training_environment_config": training_environment.as_dict(),
+            "validation_environment_config_id": validation_environment.fingerprint,
+            "validation_environment_config": validation_environment.as_dict(),
             "config": asdict(self.config),
             "history": [
                 {
@@ -173,14 +195,66 @@ class TrainingResult:
 ProgressCallback = Callable[[GenerationStats], None]
 
 
+@dataclass(frozen=True)
+class _FitnessTask:
+    chromosome: LinearChromosome
+    episode_seeds: tuple[int, ...]
+    max_pieces: int
+    policy_config: GeneticPolicyConfig
+
+
+def _evaluate_fitness_task(task: _FitnessTask) -> FitnessEvaluation:
+    """Evaluate one chromosome; kept at module scope for process pickling."""
+
+    results = [
+        evaluate_episode(
+            GeneticAgent(task.chromosome, task.policy_config),
+            seed=episode_seed,
+            max_pieces=task.max_pieces,
+        )
+        for episode_seed in task.episode_seeds
+    ]
+    task_returns = [float(result.task_return) for result in results]
+    return FitnessEvaluation(
+        chromosome=task.chromosome,
+        fitness=fmean(task_returns),
+        task_return_stddev=(
+            stdev(task_returns) if len(task_returns) > 1 else 0.0
+        ),
+        mean_score=fmean(result.score for result in results),
+        mean_lines=fmean(result.lines_removed for result in results),
+        mean_pieces=fmean(result.pieces_placed for result in results),
+        episode_seeds=task.episode_seeds,
+    )
+
+
 class GeneticTrainer:
     """Evolve policies using rotating seed batches and held-out model selection."""
 
-    def __init__(self, config: GeneticAlgorithmConfig | None = None) -> None:
+    def __init__(
+        self,
+        config: GeneticAlgorithmConfig | None = None,
+        *,
+        workers: int = 1,
+    ) -> None:
         self.config = config or GeneticAlgorithmConfig()
+        self.requested_workers = workers
+        self.worker_count = resolve_worker_count(workers, self.config.population_size)
         self._rng = random.Random(self.config.seed)
 
     def train(self, progress: ProgressCallback | None = None) -> TrainingResult:
+        """Run evolution, optionally evaluating chromosomes in worker processes."""
+
+        if self.worker_count == 1:
+            return self._train(progress, executor=None)
+        with ProcessPoolExecutor(max_workers=self.worker_count) as executor:
+            return self._train(progress, executor=executor)
+
+    def _train(
+        self,
+        progress: ProgressCallback | None,
+        executor: ProcessPoolExecutor | None,
+    ) -> TrainingResult:
         self._rng = random.Random(self.config.seed)
         population = self._initial_population()
         history: list[GenerationStats] = []
@@ -189,7 +263,11 @@ class GeneticTrainer:
 
         for generation in range(self.config.generations):
             training_seeds = self.config.training_seeds(generation)
-            evaluations = self._evaluate_population(population, training_seeds)
+            evaluations = self._evaluate_population(
+                population,
+                training_seeds,
+                executor=executor,
+            )
             ranked = sorted(evaluations, key=lambda item: item.fitness, reverse=True)
             final_ranked = ranked
             best = ranked[0]
@@ -222,10 +300,12 @@ class GeneticTrainer:
                 *(item.chromosome for item in final_ranked[: self.config.elite_count]),
             ]
         )
-        validation_results = [
-            self.evaluate(chromosome, self.config.validation_seeds)
-            for chromosome in validation_candidates
-        ]
+        validation_results = self._evaluate_chromosomes(
+            validation_candidates,
+            self.config.validation_seeds,
+            max_pieces=self.config.validation_max_pieces,
+            executor=executor,
+        )
         best_validated = max(validation_results, key=lambda item: item.fitness)
         return TrainingResult(
             self.config,
@@ -246,23 +326,13 @@ class GeneticTrainer:
         )
         if not seeds:
             raise ValueError("At least one episode seed is required for evaluation.")
-        results = [
-            evaluate_episode(
-                GeneticAgent(chromosome, self.config.policy_config),
-                seed=episode_seed,
-                max_pieces=self.config.max_pieces,
+        return _evaluate_fitness_task(
+            _FitnessTask(
+                chromosome,
+                seeds,
+                self.config.validation_max_pieces,
+                self.config.policy_config,
             )
-            for episode_seed in seeds
-        ]
-        rewards = [result.total_reward for result in results]
-        return FitnessEvaluation(
-            chromosome=chromosome,
-            fitness=fmean(rewards),
-            reward_stddev=stdev(rewards) if len(rewards) > 1 else 0.0,
-            mean_score=fmean(result.score for result in results),
-            mean_lines=fmean(result.lines_removed for result in results),
-            mean_pieces=fmean(result.pieces_placed for result in results),
-            episode_seeds=seeds,
         )
 
     def _initial_population(self) -> list[LinearChromosome]:
@@ -283,8 +353,41 @@ class GeneticTrainer:
         self,
         population: Sequence[LinearChromosome],
         episode_seeds: Sequence[int],
+        *,
+        executor: ProcessPoolExecutor | None = None,
     ) -> list[FitnessEvaluation]:
-        return [self.evaluate(chromosome, episode_seeds) for chromosome in population]
+        return self._evaluate_chromosomes(
+            population,
+            episode_seeds,
+            max_pieces=self.config.max_pieces,
+            executor=executor,
+        )
+
+    def _evaluate_chromosomes(
+        self,
+        chromosomes: Sequence[LinearChromosome],
+        episode_seeds: Sequence[int],
+        *,
+        max_pieces: int,
+        executor: ProcessPoolExecutor | None,
+    ) -> list[FitnessEvaluation]:
+        seeds = tuple(episode_seeds)
+        if not seeds:
+            raise ValueError("At least one episode seed is required for evaluation.")
+        tasks = [
+            _FitnessTask(
+                chromosome,
+                seeds,
+                max_pieces,
+                self.config.policy_config,
+            )
+            for chromosome in chromosomes
+        ]
+        if executor is None:
+            return [_evaluate_fitness_task(task) for task in tasks]
+        # executor.map preserves input order, which keeps stable tie-breaking and
+        # therefore makes serial and parallel evolution reproducibly equivalent.
+        return list(executor.map(_evaluate_fitness_task, tasks))
 
     def _next_generation(
         self,

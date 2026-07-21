@@ -21,16 +21,19 @@ from ..env.observation import Observation
 from .base import Agent
 
 
-DiscreteState: TypeAlias = tuple[str, str, str, str]
+DiscreteState: TypeAlias = tuple[str, str, str, str, str, str, str, str]
 QKey: TypeAlias = tuple[DiscreteState, int]
-_CHECKPOINT_VERSION = 1
+_CHECKPOINT_VERSION = 2
 
 
 class QTableAgent(Agent):
     """A dictionary-based Q-Learning agent with an epsilon-greedy policy.
 
     States are discretized from featured observations as
-    ``(holes_bucket, aggregate_height_bucket, bumpiness_bucket, current_piece)``.
+    ``(holes, aggregate_height, max_height, bumpiness, current_piece, hold,
+    next_piece, remaining_budget)``.  The hold component includes whether hold
+    is currently available, preventing two strategically different states from
+    aliasing merely because the held tetromino is the same.
     An action is encoded with :meth:`Action.to_id`, therefore each Q-table entry
     follows the classical ``Q[(state, action_id)] -> float`` form.
 
@@ -40,9 +43,12 @@ class QTableAgent(Agent):
         epsilon_decay: Multiplicative epsilon decay applied after each observed
             real environment transition.
         alpha: Learning rate in the Bellman update.
-        gamma: Discount factor in the Bellman update.
+        gamma: Discount factor in the Bellman update.  The finite-horizon task
+            uses an undiscounted return by default.
         board_width: Width used by ``Action.to_id``.  It must match the
             environment supplied to :meth:`select_action` and :meth:`observe`.
+        max_pieces: Finite task horizon used to normalize remaining budget.  It
+            must match the observations supplied to this agent.
         seed: Optional seed for reproducible epsilon-greedy exploration.
 
     The agent requires ``TetrisConfig(observation_mode="featured")`` because
@@ -57,9 +63,10 @@ class QTableAgent(Agent):
         epsilon_min: float = 0.05,
         epsilon_decay: float = 0.9999,
         alpha: float = 0.1,
-        gamma: float = 0.99,
+        gamma: float = 1.0,
         *,
         board_width: int = 10,
+        max_pieces: int = 500,
         seed: int | None = None,
     ) -> None:
         if not 0.0 <= epsilon_min <= epsilon_start <= 1.0:
@@ -72,13 +79,19 @@ class QTableAgent(Agent):
             raise ValueError("gamma must be between 0 and 1.")
         if board_width <= 0:
             raise ValueError("board_width must be positive.")
+        if max_pieces <= 0:
+            raise ValueError("max_pieces must be positive.")
 
+        self.epsilon_start = epsilon_start
         self.epsilon = epsilon_start
         self.epsilon_min = epsilon_min
         self.epsilon_decay = epsilon_decay
         self.alpha = alpha
         self.gamma = gamma
         self.board_width = board_width
+        self.max_pieces = max_pieces
+        self.source_max_pieces: int | None = None
+        self.seed = seed
         self.q_table: defaultdict[QKey, float] = defaultdict(float)
         self._rng = random.Random(seed)
         self._training = True
@@ -88,6 +101,20 @@ class QTableAgent(Agent):
         self.nodes_expanded = 0
         self.last_nodes_expanded = 0
         self.last_selected_value: float | None = None
+
+    def configuration(self) -> dict[str, object]:
+        return {
+            "algorithm": "tabular_q_learning",
+            "epsilon_start": self.epsilon_start,
+            "epsilon_min": self.epsilon_min,
+            "epsilon_decay": self.epsilon_decay,
+            "alpha": self.alpha,
+            "gamma": self.gamma,
+            "board_width": self.board_width,
+            "max_pieces": self.max_pieces,
+            "source_max_pieces": self.source_max_pieces,
+            "seed": self.seed,
+        }
 
     @property
     def training(self) -> bool:
@@ -203,6 +230,7 @@ class QTableAgent(Agent):
             "checkpoint_version": _CHECKPOINT_VERSION,
             "algorithm": "tabular-q-learning",
             "board_width": self.board_width,
+            "max_pieces": self.max_pieces,
             "epsilon": self.epsilon,
             "transitions_observed": self.transitions_observed,
             "episodes_completed": self.episodes_completed,
@@ -211,7 +239,12 @@ class QTableAgent(Agent):
         with destination.open("wb") as checkpoint:
             pickle.dump(payload, checkpoint, protocol=pickle.HIGHEST_PROTOCOL)
 
-    def load(self, path: str | Path) -> None:
+    def load(
+        self,
+        path: str | Path,
+        *,
+        allow_horizon_transfer: bool = False,
+    ) -> None:
         """Load a Q-table checkpoint created by :meth:`save`.
 
         Raises:
@@ -221,12 +254,30 @@ class QTableAgent(Agent):
             payload = pickle.load(checkpoint)
         if not isinstance(payload, dict):
             raise ValueError("Invalid Q-table checkpoint format.")
-        if payload.get("checkpoint_version") != _CHECKPOINT_VERSION:
-            raise ValueError("Unsupported Q-table checkpoint version.")
+        checkpoint_version = payload.get("checkpoint_version")
+        if checkpoint_version != _CHECKPOINT_VERSION:
+            if checkpoint_version == 1:
+                raise ValueError(
+                    "Q-table checkpoint version 1 uses the legacy four-component state schema; "
+                    "it is incompatible with the budget-aware state schema and must be retrained."
+                )
+            raise ValueError(
+                f"Unsupported Q-table checkpoint version {checkpoint_version!r}; "
+                f"expected version {_CHECKPOINT_VERSION}."
+            )
         if payload.get("algorithm") != "tabular-q-learning":
             raise ValueError("Checkpoint was not created by QTableAgent.")
         if payload.get("board_width") != self.board_width:
             raise ValueError("Checkpoint board_width does not match this agent.")
+        trained_max_pieces = payload.get("max_pieces")
+        if trained_max_pieces != self.max_pieces and not allow_horizon_transfer:
+            raise ValueError(
+                "Checkpoint max_pieces does not match this agent's task horizon; "
+                "use allow_horizon_transfer=True only for an explicit frozen-policy stress test."
+            )
+        if not isinstance(trained_max_pieces, int) or trained_max_pieces <= 0:
+            raise ValueError("Checkpoint max_pieces is invalid.")
+        self.source_max_pieces = trained_max_pieces
 
         table = payload.get("q_table")
         if not isinstance(table, dict):
@@ -256,12 +307,16 @@ class QTableAgent(Agent):
 
         * holes: ``0``, ``1``, ``2``, ``3-4``, ``5-6``, ``7+``;
         * aggregate height: ``0-10``, ``11-20``, ``21-30``, ``31-40``, ``41+``;
+        * maximum height: ``0-4``, ``5-8``, ``9-12``, ``13-16``, ``17+``;
         * bumpiness: ``0-2``, ``3-5``, ``6-9``, ``10-14``, ``15+``;
-        * current piece: one of the seven tetromino names (or ``none``).
+        * current, held and next pieces (including hold availability);
+        * remaining finite-horizon budget: ``0``, ``1-10%``, ``11-25%``,
+          ``26-50%``, ``51-75%`` or ``76-100%``.
         """
         metrics = observation.metrics
         if metrics is None:
             raise ValueError("QTableAgent requires TetrisConfig(observation_mode='featured').")
+        self._validate_observation_budget(observation)
 
         if metrics.holes == 0:
             holes_bucket = "holes:0"
@@ -287,6 +342,17 @@ class QTableAgent(Agent):
         else:
             height_bucket = "height:41+"
 
+        if metrics.max_height <= 4:
+            max_height_bucket = "max-height:0-4"
+        elif metrics.max_height <= 8:
+            max_height_bucket = "max-height:5-8"
+        elif metrics.max_height <= 12:
+            max_height_bucket = "max-height:9-12"
+        elif metrics.max_height <= 16:
+            max_height_bucket = "max-height:13-16"
+        else:
+            max_height_bucket = "max-height:17+"
+
         if metrics.bumpiness <= 2:
             bumpiness_bucket = "bumpiness:0-2"
         elif metrics.bumpiness <= 5:
@@ -299,7 +365,20 @@ class QTableAgent(Agent):
             bumpiness_bucket = "bumpiness:15+"
 
         piece = observation.current_piece.value if observation.current_piece is not None else "none"
-        return holes_bucket, height_bucket, bumpiness_bucket, f"piece:{piece}"
+        held_piece = observation.hold_piece.value if observation.hold_piece is not None else "none"
+        next_piece = observation.next_piece.value if observation.next_piece is not None else "none"
+        hold_availability = "available" if observation.can_hold else "unavailable"
+        remaining_budget_bucket = self._remaining_budget_bucket(observation.remaining_pieces)
+        return (
+            holes_bucket,
+            height_bucket,
+            max_height_bucket,
+            bumpiness_bucket,
+            f"piece:{piece}",
+            f"hold:{held_piece}:{hold_availability}",
+            f"next-piece:{next_piece}",
+            remaining_budget_bucket,
+        )
 
     def _max_future_q(
         self,
@@ -309,12 +388,38 @@ class QTableAgent(Agent):
         truncated: bool,
     ) -> float:
         """Return the critic's masked future value, or zero for a terminal state."""
-        if terminated or truncated:
+        if terminated:
             return 0.0
         legal_action_ids = self._legal_action_ids(next_state.action_mask)
         if not legal_action_ids:
-            raise ValueError("A non-terminal next_state must expose at least one legal action.")
+            boundary = "truncated" if truncated else "non-terminal"
+            raise ValueError(
+                f"A bootstrap-enabled {boundary} next_state must expose at least one legal action."
+            )
         return max(self.q_table[(next_state_key, action_id)] for action_id in legal_action_ids)
+
+    def _validate_observation_budget(self, observation: Observation) -> None:
+        if observation.max_pieces != self.max_pieces:
+            raise ValueError(
+                "Observation max_pieces does not match this QTableAgent; "
+                "construct the agent with the environment's finite horizon."
+            )
+        if not 0 <= observation.remaining_pieces <= observation.max_pieces:
+            raise ValueError("Observation remaining_pieces must be between zero and max_pieces.")
+
+    def _remaining_budget_bucket(self, remaining_pieces: int) -> str:
+        if remaining_pieces == 0:
+            return "remaining:0"
+        fraction = remaining_pieces / self.max_pieces
+        if fraction <= 0.10:
+            return "remaining:1-10%"
+        if fraction <= 0.25:
+            return "remaining:11-25%"
+        if fraction <= 0.50:
+            return "remaining:26-50%"
+        if fraction <= 0.75:
+            return "remaining:51-75%"
+        return "remaining:76-100%"
 
     def _validate_context(self, context: DecisionContext) -> None:
         if not context.legal_actions:
@@ -350,7 +455,7 @@ class QTableAgent(Agent):
         state, action_id = key
         if (
             not isinstance(state, tuple)
-            or len(state) != 4
+            or len(state) != 8
             or not all(isinstance(value, str) for value in state)
             or not isinstance(action_id, int)
             or not 0 <= action_id < 8 * self.board_width

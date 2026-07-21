@@ -13,7 +13,7 @@ from ..core.metrics import calculate_metrics
 from ..core.randomizer import SevenBagRandomizer
 from ..core.tetromino import PieceType, rotations_for
 from .action import Action, EpisodeFinishedError, InvalidActionError
-from .config import TetrisConfig
+from .config import HorizonMode, TetrisConfig
 from .context import DecisionContext, SimulatedTransition
 from .observation import Observation
 from .reward import calculate_reward
@@ -53,9 +53,10 @@ class TetrisEnv:
         seed: int | None = None,
         *,
         preview_count: int | None = None,
+        horizon_mode: HorizonMode | None = None,
         config: TetrisConfig | None = None,
     ) -> None:
-        overrides = (width, height, max_pieces, preview_count)
+        overrides = (width, height, max_pieces, preview_count, horizon_mode)
         if config is not None and any(value is not None for value in overrides):
             raise ValueError("Pass either config or individual environment overrides, not both.")
         if config is None:
@@ -66,6 +67,7 @@ class TetrisEnv:
                 height=defaults.height if height is None else height,
                 max_pieces=defaults.max_pieces if max_pieces is None else max_pieces,
                 preview_count=defaults.preview_count if preview_count is None else preview_count,
+                horizon_mode=defaults.horizon_mode if horizon_mode is None else horizon_mode,
             )
         self.config = config
         self._randomizer: SevenBagRandomizer | None = None
@@ -83,6 +85,14 @@ class TetrisEnv:
     @property
     def max_pieces(self) -> int:
         return self.config.max_pieces
+
+    @property
+    def horizon_mode(self) -> HorizonMode:
+        return self.config.horizon_mode
+
+    @property
+    def remaining_pieces(self) -> int:
+        return max(self.max_pieces - self.total_pieces_placed, 0)
 
     @property
     def action_space_size(self) -> int:
@@ -134,11 +144,7 @@ class TetrisEnv:
 
     @property
     def termination_reasons(self) -> tuple[str, ...]:
-        reasons: list[str] = []
-        if self.terminated:
-            reasons.append("game_over")
-        reasons.extend(self._truncation_reasons)
-        return tuple(reasons)
+        return self._terminal_reasons + self._truncation_reasons
 
     @property
     def termination_reason(self) -> str | None:
@@ -170,10 +176,13 @@ class TetrisEnv:
         self._total_pieces_placed = 0
         self._terminated = False
         self._truncated = False
+        self._terminal_reasons: tuple[str, ...] = ()
         self._truncation_reasons: tuple[str, ...] = ()
         self._last_metrics = calculate_metrics(self._board)
         self._legal_placement_cache: dict[Action, _Placement] | None = None
-        self._terminated = not bool(self._legal_placements_after_state_update())
+        if not self._legal_placements_after_state_update():
+            self._terminal_reasons = ("game_over",)
+            self._terminated = True
 
         observation = self.get_observation()
         info: ResetInfo = {
@@ -182,6 +191,9 @@ class TetrisEnv:
             "ruleset_version": self.config.ruleset_version,
             "config_id": self.config.fingerprint,
             "config": self.config.as_dict(),
+            "horizon_mode": self.horizon_mode,
+            "max_pieces": self.max_pieces,
+            "remaining_pieces": self.remaining_pieces,
             "state_hash": self.state_hash(),
         }
         return observation, info
@@ -210,9 +222,17 @@ class TetrisEnv:
         return placements
 
     def legal_actions(self) -> tuple[Action, ...]:
-        if self.done:
+        if self.done and not self._exposes_time_limit_bootstrap_state():
             return ()
         return tuple(self._legal_placements_after_state_update())
+
+    def _exposes_time_limit_bootstrap_state(self) -> bool:
+        return (
+            not self.terminated
+            and self.truncated
+            and self.horizon_mode == "time_limit"
+            and self._truncation_reasons == ("piece_limit",)
+        )
 
     def action_mask(self) -> tuple[bool, ...]:
         mask = [False] * self.action_space_size
@@ -221,9 +241,9 @@ class TetrisEnv:
         return tuple(mask)
 
     def describe_action(self, action: Action) -> ActionPreview:
-        placement = self._legal_placements_after_state_update().get(action)
-        if self.done or placement is None:
+        if action not in self.legal_actions():
             raise InvalidActionError(f"Action {action!r} is not legal in the current state.")
+        placement = self._legal_placements_after_state_update()[action]
         return ActionPreview(placement.piece, placement.shape, placement.row)
 
     def get_observation(self) -> Observation:
@@ -237,6 +257,8 @@ class TetrisEnv:
             level=self.level,
             total_lines_cleared=self.total_lines_cleared,
             total_pieces_placed=self.total_pieces_placed,
+            max_pieces=self.max_pieces,
+            remaining_pieces=self.remaining_pieces,
             back_to_back_active=self.back_to_back_active,
             terminated=self.terminated,
             truncated=self.truncated,
@@ -284,11 +306,19 @@ class TetrisEnv:
         self._current_piece = self._take_preview_piece()
 
         self._invalidate_legal_actions()
-        self._terminated = self.current_piece is not None and not bool(
+        has_legal_placements = self.current_piece is not None and bool(
             self._legal_placements_after_state_update()
         )
+        terminal_reasons: list[str] = []
+        if self.current_piece is not None and not has_legal_placements:
+            terminal_reasons.append("game_over")
+        if self.total_pieces_placed >= self.max_pieces and self.horizon_mode == "finite":
+            terminal_reasons.append("horizon_completed")
+        self._terminal_reasons = tuple(terminal_reasons)
+        self._terminated = bool(terminal_reasons)
+
         truncation_reasons: list[str] = []
-        if self.total_pieces_placed >= self.max_pieces:
+        if self.total_pieces_placed >= self.max_pieces and self.horizon_mode == "time_limit":
             truncation_reasons.append("piece_limit")
         if self.current_piece is None:
             truncation_reasons.append("preview_horizon")
@@ -322,6 +352,9 @@ class TetrisEnv:
             "board_metrics_after": self._last_metrics.as_dict(),
             "legal_action_count": legal_action_count,
             "reward": breakdown.as_dict(),
+            "horizon_mode": self.horizon_mode,
+            "max_pieces": self.max_pieces,
+            "remaining_pieces": self.remaining_pieces,
             "terminated": self.terminated,
             "truncated": self.truncated,
             "termination_reason": self.termination_reason,
@@ -419,6 +452,7 @@ class TetrisEnv:
             "back_to_back": self.back_to_back_active,
             "terminated": self.terminated,
             "truncated": self.truncated,
+            "termination_reasons": self.termination_reasons,
             "config_id": self.config.fingerprint,
         }
         serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
@@ -466,6 +500,7 @@ class TetrisEnv:
         clone._total_pieces_placed = self.total_pieces_placed
         clone._terminated = self.terminated
         clone._truncated = self.truncated
+        clone._terminal_reasons = self._terminal_reasons
         clone._truncation_reasons = self._truncation_reasons
         clone._last_metrics = self._last_metrics
         clone._legal_placement_cache = None

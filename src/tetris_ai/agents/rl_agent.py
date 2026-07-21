@@ -36,7 +36,8 @@ StateInput: TypeAlias = Observation | Tensor | Sequence[float]
 
 _PIECE_TYPES: tuple[PieceType, ...] = tuple(PieceType)
 _PIECE_INDEX = {piece: index for index, piece in enumerate(_PIECE_TYPES)}
-_CHECKPOINT_VERSION = 2
+_CHECKPOINT_VERSION = 3
+_OBSERVATION_SCHEMA = "featured-full-board-budget-v3"
 
 
 class TetrisNet(nn.Module):
@@ -83,6 +84,16 @@ class Transition:
         """Whether this transition ends the experiment episode."""
         return self.terminated or self.truncated
 
+    @property
+    def bootstrap_terminal(self) -> bool:
+        """Whether Bellman bootstrapping must stop at this transition.
+
+        External time-limit truncations are replay boundaries, but they are
+        not terminal states of the underlying task and therefore retain their
+        continuation value.
+        """
+        return self.terminated
+
 
 class ReplayBuffer:
     """Bounded replay memory used to decorrelate consecutive Tetris turns."""
@@ -119,8 +130,9 @@ class RLAgent(Agent):
         board_height: int = 20,
         *,
         preview_count: int = 5,
+        max_pieces: int = 500,
         hidden_dim: int = 128,
-        gamma: float = 0.99,
+        gamma: float = 1.0,
         learning_rate: float = 3e-4,
         batch_size: int = 128,
         replay_capacity: int = 100_000,
@@ -138,6 +150,8 @@ class RLAgent(Agent):
             raise ValueError("board_width and board_height must be positive.")
         if preview_count <= 0:
             raise ValueError("preview_count must be positive.")
+        if max_pieces <= 0:
+            raise ValueError("max_pieces must be positive.")
         if not 0.0 <= gamma <= 1.0:
             raise ValueError("gamma must be between 0 and 1.")
         if learning_rate <= 0.0:
@@ -160,11 +174,17 @@ class RLAgent(Agent):
         self.board_width = board_width
         self.board_height = board_height
         self.preview_count = preview_count
+        self.max_pieces = max_pieces
+        self.source_max_pieces: int | None = None
+        self.hidden_dim = hidden_dim
         self.action_space_size = 8 * board_width
-        self.feature_dim = self._feature_dim(board_width, preview_count)
+        self.feature_dim = self._feature_dim(board_width, board_height, preview_count)
         self.gamma = gamma
+        self.learning_rate = learning_rate
         self.batch_size = batch_size
+        self.replay_capacity = replay_capacity
         self.learning_starts = learning_starts
+        self.epsilon_start = epsilon_start
         self.epsilon_min = epsilon_min
         self.epsilon_decay = epsilon_decay
         self.epsilon = epsilon_start
@@ -172,6 +192,7 @@ class RLAgent(Agent):
         self.gradient_clip_norm = gradient_clip_norm
         self.auto_train = auto_train
         self.device = torch.device(device)
+        self.seed = seed
         self._rng = random.Random(seed)
         self._training = True
         self._optimization_steps = 0
@@ -196,6 +217,32 @@ class RLAgent(Agent):
         self.loss_fn = nn.SmoothL1Loss()
         self.replay_buffer = ReplayBuffer(replay_capacity)
         self.policy_net.train()
+
+    def configuration(self) -> dict[str, object]:
+        return {
+            "algorithm": "masked_double_dqn",
+            "board_width": self.board_width,
+            "board_height": self.board_height,
+            "preview_count": self.preview_count,
+            "max_pieces": self.max_pieces,
+            "source_max_pieces": self.source_max_pieces,
+            "hidden_dim": self.hidden_dim,
+            "feature_dim": self.feature_dim,
+            "action_space_size": self.action_space_size,
+            "gamma": self.gamma,
+            "learning_rate": self.learning_rate,
+            "batch_size": self.batch_size,
+            "replay_capacity": self.replay_capacity,
+            "learning_starts": self.learning_starts,
+            "epsilon_start": self.epsilon_start,
+            "epsilon_min": self.epsilon_min,
+            "epsilon_decay": self.epsilon_decay,
+            "target_update_interval": self.target_update_interval,
+            "gradient_clip_norm": self.gradient_clip_norm,
+            "auto_train": self.auto_train,
+            "device": str(self.device),
+            "seed": self.seed,
+        }
 
     @property
     def training(self) -> bool:
@@ -299,16 +346,21 @@ class RLAgent(Agent):
         next_states = torch.stack([item.next_state for item in batch]).to(self.device)
         next_masks = torch.stack([item.next_action_mask for item in batch]).to(self.device)
         rewards = torch.tensor([item.reward for item in batch], dtype=torch.float32, device=self.device)
-        dones = torch.tensor([item.done for item in batch], dtype=torch.bool, device=self.device)
+        bootstrap_terminals = torch.tensor(
+            [item.bootstrap_terminal for item in batch], dtype=torch.bool, device=self.device
+        )
 
         predicted_values = self.policy_net(states).gather(1, action_ids.unsqueeze(1)).squeeze(1)
         with torch.no_grad():
             next_values = torch.zeros(self.batch_size, dtype=torch.float32, device=self.device)
-            bootstrap_rows = ~dones
+            bootstrap_rows = ~bootstrap_terminals
             if torch.any(bootstrap_rows):
                 bootstrap_masks = next_masks[bootstrap_rows]
                 if torch.any(~bootstrap_masks.any(dim=1)):
-                    raise RuntimeError("A non-terminal replay transition has no legal next action.")
+                    raise RuntimeError(
+                        "A bootstrap-enabled replay transition has no legal next action; "
+                        "external truncations must preserve the next-state action mask."
+                    )
                 online_values = self.policy_net(next_states[bootstrap_rows]).masked_fill(
                     ~bootstrap_masks, float("-inf")
                 )
@@ -343,6 +395,9 @@ class RLAgent(Agent):
                 "board_width": self.board_width,
                 "board_height": self.board_height,
                 "preview_count": self.preview_count,
+                "max_pieces": self.max_pieces,
+                "observation_schema": _OBSERVATION_SCHEMA,
+                "hidden_dim": self.hidden_dim,
                 "feature_dim": self.feature_dim,
                 "action_space_size": self.action_space_size,
                 "policy_net": self.policy_net.state_dict(),
@@ -350,22 +405,54 @@ class RLAgent(Agent):
             destination,
         )
 
-    def load(self, path: str | Path) -> None:
+    def load(
+        self,
+        path: str | Path,
+        *,
+        allow_horizon_transfer: bool = False,
+    ) -> None:
         """Load a checkpoint created by this masked Double-DQN implementation."""
         checkpoint = torch.load(Path(path), map_location=self.device)
         if not isinstance(checkpoint, dict):
             raise ValueError("Invalid RL checkpoint format.")
+        checkpoint_version = checkpoint.get("checkpoint_version")
+        if checkpoint_version != _CHECKPOINT_VERSION:
+            if checkpoint_version == 2:
+                raise ValueError(
+                    "RL checkpoint version 2 uses the legacy metrics-only observation encoder; "
+                    "it is incompatible with the full-board budget-aware encoder and must be retrained."
+                )
+            raise ValueError(
+                f"Unsupported RL checkpoint version {checkpoint_version!r}; "
+                f"expected version {_CHECKPOINT_VERSION}."
+            )
         required = {
-            "checkpoint_version": _CHECKPOINT_VERSION,
             "algorithm": "masked-double-dqn",
             "board_width": self.board_width,
             "board_height": self.board_height,
             "preview_count": self.preview_count,
+            "observation_schema": _OBSERVATION_SCHEMA,
+            "hidden_dim": self.hidden_dim,
             "feature_dim": self.feature_dim,
             "action_space_size": self.action_space_size,
         }
-        if any(checkpoint.get(key) != value for key, value in required.items()):
-            raise ValueError("Checkpoint is incompatible with this RL observation/action schema.")
+        mismatches = [
+            key for key, expected in required.items() if checkpoint.get(key) != expected
+        ]
+        if mismatches:
+            raise ValueError(
+                "RL checkpoint is incompatible with this agent's observation/action schema; "
+                f"mismatched fields: {', '.join(mismatches)}."
+            )
+        trained_max_pieces = checkpoint.get("max_pieces")
+        if not isinstance(trained_max_pieces, int) or trained_max_pieces <= 0:
+            raise ValueError("RL checkpoint max_pieces is invalid.")
+        if trained_max_pieces != self.max_pieces and not allow_horizon_transfer:
+            raise ValueError(
+                "RL checkpoint max_pieces horizon differs from this agent; use "
+                "allow_horizon_transfer=True only for an explicit frozen-policy stress test."
+            )
+        self.source_max_pieces = trained_max_pieces
         policy_state = checkpoint.get("policy_net")
         if policy_state is None:
             raise ValueError("Checkpoint does not contain policy_net weights.")
@@ -402,10 +489,15 @@ class RLAgent(Agent):
                 "Observation preview length does not match this agent's preview_count; "
                 "create the agent for the environment configuration."
             )
+        self._validate_observation_budget(observation)
 
         area = float(self.board_width * self.board_height)
         max_bumpiness = float(max(1, (self.board_width - 1) * self.board_height))
-        features = [height / self.board_height for height in metrics.column_heights]
+        # The exact board occupancy comes first.  Piece identities on locked
+        # cells are irrelevant to future dynamics, so a stable binary encoding
+        # is both sufficient and independent of internal piece ids.
+        features = [float(bool(cell)) for row in observation.board for cell in row]
+        features.extend(height / self.board_height for height in metrics.column_heights)
         features.extend(
             (
                 metrics.aggregate_height / area,
@@ -413,6 +505,7 @@ class RLAgent(Agent):
                 metrics.holes / area,
                 metrics.bumpiness / max_bumpiness,
                 metrics.lines_cleared_last_move / 4.0,
+                observation.remaining_pieces / observation.max_pieces,
                 float(observation.can_hold),
                 float(observation.hold_piece is not None),
                 float(observation.back_to_back_active),
@@ -488,10 +581,27 @@ class RLAgent(Agent):
             if not action_mask[action_id]:
                 raise ValueError("DecisionContext marks one of its legal actions as invalid.")
 
+    def _validate_observation_budget(self, observation: Observation) -> None:
+        if observation.max_pieces != self.max_pieces:
+            raise ValueError(
+                "Observation max_pieces does not match this RLAgent; "
+                "construct the agent with the environment's finite horizon."
+            )
+        if not 0 <= observation.remaining_pieces <= observation.max_pieces:
+            raise ValueError("Observation remaining_pieces must be between zero and max_pieces.")
+
     @staticmethod
-    def _feature_dim(board_width: int, preview_count: int) -> int:
-        # Heights + five board metrics + three flags + current/preview/hold pieces.
-        return board_width + 5 + 3 + (preview_count + 2) * len(_PIECE_TYPES)
+    def _feature_dim(board_width: int, board_height: int, preview_count: int) -> int:
+        # Binary board + heights + five metrics + budget + three flags +
+        # current/preview/hold one-hot pieces.
+        return (
+            board_width * board_height
+            + board_width
+            + 5
+            + 1
+            + 3
+            + (preview_count + 2) * len(_PIECE_TYPES)
+        )
 
     @staticmethod
     def _piece_one_hot(piece: PieceType | None) -> list[float]:

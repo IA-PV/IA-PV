@@ -9,7 +9,11 @@ from .base import Agent
 
 class RandomAgent(Agent):
     def __init__(self, seed: int | None = None) -> None:
+        self.seed = seed
         self._rng = random.Random(seed)
+
+    def configuration(self) -> dict[str, object]:
+        return {"policy": "uniform_random_legal_action", "seed": self.seed}
 
     def select_action(self, context: DecisionContext) -> Action:
         actions = context.legal_actions
