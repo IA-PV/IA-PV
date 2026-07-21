@@ -2,43 +2,110 @@ from __future__ import annotations
 
 import argparse
 from collections import defaultdict
-import csv
+from concurrent.futures import ProcessPoolExecutor
+from dataclasses import asdict, dataclass
+from datetime import datetime
 from pathlib import Path
 from statistics import fmean, stdev
 
 from ..agents import (
+    Agent,
     GeneticAgent,
+    GeneticModel,
     QTableAgent,
     RandomAgent,
     StateGoalHeuristicAgent,
     load_genetic_model,
 )
+from ..env import TetrisConfig
 from ..evaluation import EpisodeResult, evaluate_episode
+from ..execution import resolve_worker_count
+from ..reporting import write_evaluation_reports
+
+
+@dataclass(frozen=True)
+class _EvaluationTask:
+    """Serializable description of one independent agent episode."""
+
+    agent_kind: str
+    seed: int
+    max_pieces: int
+    search_depth: int = 3
+    beam_width: int = 8
+    genetic_model: GeneticModel | None = None
+    checkpoint: Path | None = None
+    allow_horizon_transfer: bool = False
+
+
+@dataclass(frozen=True)
+class _EvaluationOutput:
+    result: EpisodeResult
+    agent_configuration: dict[str, object]
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Evaluate the headless Tetris agents.")
-    parser.add_argument("--episodes", type=int, default=5)
-    parser.add_argument("--max-pieces", type=int, default=100)
-    parser.add_argument("--seed", type=int, default=0, help="First episode seed; following episodes increment it.")
+    parser.add_argument("--episodes", type=int, default=50)
+    parser.add_argument("--max-pieces", type=int, default=500)
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=1_000_000,
+        help=(
+            "First reserved test seed; following episodes increment it. "
+            "Keep this range isolated from training and validation seeds."
+        ),
+    )
     parser.add_argument("--search-depth", type=int, default=3, help="Maximum depth used by the state/goal heuristic-search agent.")
     parser.add_argument("--beam-width", type=int, default=8, help="Number of best immediate actions expanded by beam search.")
     parser.add_argument(
         "--q-table-checkpoint",
         type=Path,
         default=None,
-        help="Optional trained Q-table checkpoint to include in the CSV comparison.",
+        help="Optional trained Q-table checkpoint to include in the comparison report.",
     )
     parser.add_argument(
         "--genetic-model",
         type=Path,
         help="Optional JSON produced by train_genetic_agent; includes GeneticAgent in the comparison.",
     )
+    parser.add_argument(
+        "--rl-checkpoint",
+        type=Path,
+        help="Optional checkpoint produced by train_rl; includes RLAgent in the comparison.",
+    )
+    parser.add_argument(
+        "--allow-horizon-transfer",
+        action="store_true",
+        help=(
+            "Allow Q/RL checkpoints trained at another max-pieces horizon. "
+            "Use only for a declared frozen-policy stress test."
+        ),
+    )
+    parser.add_argument(
+        "--reports-root",
+        type=Path,
+        default=_project_root() / "reports",
+        help="Root directory for immutable per-agent and comparison reports.",
+    )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=1,
+        help=(
+            "Worker processes for independent agent/seed episodes; 1 is serial "
+            "and 0 automatically uses all but one logical CPU."
+        ),
+    )
     args = parser.parse_args()
     if args.episodes <= 0 or args.max_pieces <= 0 or args.search_depth <= 0 or args.beam_width <= 0:
         parser.error("--episodes, --max-pieces, --search-depth, and --beam-width must be positive.")
     if args.q_table_checkpoint is not None and not args.q_table_checkpoint.is_file():
         parser.error("--q-table-checkpoint must point to an existing checkpoint file.")
+    if args.rl_checkpoint is not None and not args.rl_checkpoint.is_file():
+        parser.error("--rl-checkpoint must point to an existing checkpoint file.")
+    if args.workers < 0:
+        parser.error("--workers must be zero or a positive integer.")
 
     genetic_model = None
     if args.genetic_model is not None:
@@ -46,48 +113,208 @@ def main() -> None:
             genetic_model = load_genetic_model(args.genetic_model)
         except ValueError as error:
             parser.error(str(error))
-
-    results = []
-    for episode in range(args.episodes):
-        seed = args.seed + episode
-        results.append(evaluate_episode(RandomAgent(seed), seed, args.max_pieces))
-        results.append(evaluate_episode(StateGoalHeuristicAgent(search_depth=args.search_depth, beam_width=args.beam_width), seed, args.max_pieces))
-        if args.q_table_checkpoint is not None:
-            q_table_agent = QTableAgent(seed=seed)
-            try:
-                q_table_agent.load(args.q_table_checkpoint)
-            except ValueError as error:
-                parser.error(f"Cannot load Q-table checkpoint: {error}")
-            q_table_agent.eval()
-            results.append(evaluate_episode(q_table_agent, seed, args.max_pieces))
-        if genetic_model is not None:
-            results.append(
-                evaluate_episode(
-                    GeneticAgent(
-                        genetic_model.chromosome,
-                        genetic_model.policy_config,
-                    ),
-                    seed,
-                    args.max_pieces,
-                )
+        compatibility_issues = genetic_model.compatibility_issues()
+        if compatibility_issues:
+            print(
+                "WARNING: genetic model will be evaluated only as a legacy baseline; "
+                + "; ".join(compatibility_issues)
+                + ". Retrain it before claiming planning-v2 results."
             )
 
-    destination = Path(__file__).resolve().parents[3] / "results" / "evaluation.csv"
-    destination.parent.mkdir(exist_ok=True)
-    with destination.open("w", newline="", encoding="utf-8") as output:
-        writer = csv.DictWriter(output, fieldnames=list(results[0].as_dict()))
-        writer.writeheader()
-        writer.writerows(result.as_dict() for result in results)
+    started_at = datetime.now().astimezone()
+    tasks = _build_evaluation_tasks(
+        episodes=args.episodes,
+        first_seed=args.seed,
+        max_pieces=args.max_pieces,
+        search_depth=args.search_depth,
+        beam_width=args.beam_width,
+        genetic_model=genetic_model,
+        q_table_checkpoint=args.q_table_checkpoint,
+        rl_checkpoint=args.rl_checkpoint,
+        allow_horizon_transfer=args.allow_horizon_transfer,
+    )
+    worker_count = resolve_worker_count(args.workers, len(tasks))
+    print(
+        f"Evaluating {len(tasks)} agent/seed task(s) with "
+        f"{worker_count} worker process(es) (requested={args.workers})."
+    )
+    try:
+        outputs = _execute_evaluation_tasks(tasks, worker_count)
+    except (ImportError, OSError, ValueError) as error:
+        parser.error(f"Agent evaluation failed: {error}")
+
+    results = [output.result for output in outputs]
+    agent_configurations: dict[str, list[dict[str, object]]] = defaultdict(list)
+    for output in outputs:
+        agent_configurations[output.result.agent].append(output.agent_configuration)
+
     for result in results:
         print(
             f"{result.agent:24} seed={result.seed:3} score={result.score:5} "
             f"lines={result.lines_removed:3} pieces={result.pieces_placed:3} "
-            f"reward={result.total_reward:8.2f} depth={result.search_depth:2}/{result.effective_search_depth:1} "
+            f"task={float(result.task_return):8.2f} "
+            f"train-reward={result.total_reward:8.2f} "
+            f"decision-p95={result.p95_decision_time_ms:8.2f}ms "
+            f"depth={result.search_depth:2}/{result.effective_search_depth:1} "
             f"beam={result.beam_width:2} "
             f"nodes={result.nodes_expanded:6} end={result.termination_reason}"
         )
     _print_summary(results)
-    print(f"Saved {len(results)} episode results to {destination}")
+    environment_config = TetrisConfig(max_pieces=args.max_pieces)
+    source_artifacts: dict[str, list[Path]] = {}
+    if args.q_table_checkpoint is not None:
+        source_artifacts["QTableAgent"] = [args.q_table_checkpoint]
+    if args.genetic_model is not None:
+        source_artifacts["GeneticAgent"] = [args.genetic_model]
+    if args.rl_checkpoint is not None:
+        source_artifacts["RLAgent"] = [args.rl_checkpoint]
+    reports = write_evaluation_reports(
+        results,
+        args.reports_root,
+        experiment={
+            "episodes": args.episodes,
+            "first_seed": args.seed,
+            "seeds": list(range(args.seed, args.seed + args.episodes)),
+            "environment_config_id": environment_config.fingerprint,
+            "environment_config": asdict(environment_config),
+            "workers_requested": args.workers,
+            "worker_processes": worker_count,
+            "allow_horizon_transfer": args.allow_horizon_transfer,
+        },
+        agent_configurations=agent_configurations,
+        source_artifacts=source_artifacts,
+        started_at=started_at,
+        completed_at=datetime.now().astimezone(),
+    )
+    print(f"Saved {len(results)} episode results with run_id={reports.run_id}")
+    for agent_name, directory in reports.agent_directories.items():
+        print(f"  {agent_name}: {directory}")
+    if reports.comparison_directory is not None:
+        print(f"  Comparison: {reports.comparison_directory}")
+
+
+def _project_root() -> Path:
+    return Path(__file__).resolve().parents[3]
+
+
+def _build_evaluation_tasks(
+    *,
+    episodes: int,
+    first_seed: int,
+    max_pieces: int,
+    search_depth: int,
+    beam_width: int,
+    genetic_model: GeneticModel | None,
+    q_table_checkpoint: Path | None,
+    rl_checkpoint: Path | None,
+    allow_horizon_transfer: bool = False,
+) -> list[_EvaluationTask]:
+    tasks: list[_EvaluationTask] = []
+    for episode in range(episodes):
+        seed = first_seed + episode
+        tasks.extend(
+            (
+                _EvaluationTask("random", seed, max_pieces),
+                _EvaluationTask(
+                    "state_goal",
+                    seed,
+                    max_pieces,
+                    search_depth=search_depth,
+                    beam_width=beam_width,
+                ),
+            )
+        )
+        if q_table_checkpoint is not None:
+            tasks.append(
+                _EvaluationTask(
+                    "q_table",
+                    seed,
+                    max_pieces,
+                    checkpoint=q_table_checkpoint,
+                    allow_horizon_transfer=allow_horizon_transfer,
+                )
+            )
+        if genetic_model is not None:
+            tasks.append(
+                _EvaluationTask(
+                    "genetic",
+                    seed,
+                    max_pieces,
+                    genetic_model=genetic_model,
+                )
+            )
+        if rl_checkpoint is not None:
+            tasks.append(
+                _EvaluationTask(
+                    "rl",
+                    seed,
+                    max_pieces,
+                    checkpoint=rl_checkpoint,
+                    allow_horizon_transfer=allow_horizon_transfer,
+                )
+            )
+    return tasks
+
+
+def _execute_evaluation_tasks(
+    tasks: list[_EvaluationTask],
+    worker_count: int,
+) -> list[_EvaluationOutput]:
+    if worker_count <= 0:
+        raise ValueError("worker_count must be positive.")
+    if worker_count == 1:
+        return [_evaluate_task(task) for task in tasks]
+    with ProcessPoolExecutor(max_workers=worker_count) as executor:
+        # map preserves the serial task order for deterministic CSVs and output.
+        return list(executor.map(_evaluate_task, tasks))
+
+
+def _evaluate_task(task: _EvaluationTask) -> _EvaluationOutput:
+    """Build and evaluate an agent inside a worker process."""
+
+    agent = _agent_for_task(task)
+    return _EvaluationOutput(
+        evaluate_episode(agent, task.seed, task.max_pieces),
+        agent.configuration(),
+    )
+
+
+def _agent_for_task(task: _EvaluationTask) -> Agent:
+    if task.agent_kind == "random":
+        return RandomAgent(task.seed)
+    if task.agent_kind == "state_goal":
+        return StateGoalHeuristicAgent(
+            search_depth=task.search_depth,
+            beam_width=task.beam_width,
+        )
+    if task.agent_kind == "q_table":
+        if task.checkpoint is None:
+            raise ValueError("Q-table evaluation requires a checkpoint.")
+        agent = QTableAgent(seed=task.seed, max_pieces=task.max_pieces)
+        agent.load(
+            task.checkpoint,
+            allow_horizon_transfer=task.allow_horizon_transfer,
+        )
+        return agent.eval()
+    if task.agent_kind == "genetic":
+        if task.genetic_model is None:
+            raise ValueError("Genetic evaluation requires a loaded model.")
+        return GeneticAgent(
+            task.genetic_model.chromosome,
+            task.genetic_model.policy_config,
+        )
+    if task.agent_kind == "rl":
+        if task.checkpoint is None:
+            raise ValueError("RL evaluation requires a checkpoint.")
+        from ..agents import RLAgent
+
+        agent = RLAgent(seed=task.seed, max_pieces=task.max_pieces)
+        agent.load(
+            task.checkpoint,
+            allow_horizon_transfer=task.allow_horizon_transfer,
+        )
+        return agent.eval()
+    raise ValueError(f"Unknown evaluation agent kind: {task.agent_kind!r}.")
 
 
 def _print_summary(results: list[EpisodeResult]) -> None:
@@ -97,13 +324,15 @@ def _print_summary(results: list[EpisodeResult]) -> None:
 
     print("Summary (mean +/- sample standard deviation)")
     for agent_name, agent_results in grouped.items():
-        rewards = [result.total_reward for result in agent_results]
-        reward_stddev = stdev(rewards) if len(rewards) > 1 else 0.0
+        task_returns = [float(result.task_return) for result in agent_results]
+        task_return_stddev = stdev(task_returns) if len(task_returns) > 1 else 0.0
         print(
-            f"{agent_name:24} reward={fmean(rewards):8.2f} +/- {reward_stddev:7.2f} "
+            f"{agent_name:24} task={fmean(task_returns):8.2f} "
+            f"+/- {task_return_stddev:7.2f} "
             f"score={fmean(result.score for result in agent_results):8.2f} "
             f"lines={fmean(result.lines_removed for result in agent_results):6.2f} "
-            f"pieces={fmean(result.pieces_placed for result in agent_results):7.2f}"
+            f"pieces={fmean(result.pieces_placed for result in agent_results):7.2f} "
+            f"decision-p95={fmean(result.p95_decision_time_ms for result in agent_results):8.2f}ms"
         )
 
 

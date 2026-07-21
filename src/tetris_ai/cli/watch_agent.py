@@ -10,7 +10,7 @@ from ..agents import (
     StateGoalHeuristicAgent,
     load_genetic_model,
 )
-from ..env import TetrisEnv
+from ..env import CANONICAL_MAX_PIECES, TetrisConfig, TetrisEnv, rl_training_reward_config
 from ..visualization import TetrisTkViewer
 
 
@@ -22,7 +22,7 @@ def main() -> None:
         default="state-goal",
     )
     parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--max-pieces", type=int, default=500)
+    parser.add_argument("--max-pieces", type=int, default=CANONICAL_MAX_PIECES)
     parser.add_argument("--search-depth", type=int, default=3)
     parser.add_argument("--beam-width", type=int, default=8)
     parser.add_argument(
@@ -87,6 +87,7 @@ def main() -> None:
                 args.genetic_model,
                 generation=args.genetic_generation,
             )
+            _print_genetic_compatibility_warning(genetic_model)
             agent = GeneticAgent(
                 genetic_model.chromosome,
                 genetic_model.policy_config,
@@ -97,7 +98,7 @@ def main() -> None:
         # Keep PyTorch optional for users who only run the heuristic agents.
         from ..agents.rl_agent import RLAgent
 
-        agent = RLAgent(seed=args.seed)
+        agent = RLAgent(max_pieces=args.max_pieces, seed=args.seed)
         if args.rl_checkpoint is not None and args.rl_checkpoint.exists():
             try:
                 agent.load(args.rl_checkpoint)
@@ -112,7 +113,7 @@ def main() -> None:
                 agent.save(args.rl_checkpoint)
         agent.eval()
     else:
-        agent = QTableAgent(seed=args.seed)
+        agent = QTableAgent(max_pieces=args.max_pieces, seed=args.seed)
         if args.q_table_checkpoint is not None and args.q_table_checkpoint.exists():
             try:
                 agent.load(args.q_table_checkpoint)
@@ -138,8 +139,12 @@ def main() -> None:
 
 def _train_rl(agent: "RLAgent", episodes: int, max_pieces: int, seed: int) -> None:
     agent.train()
+    training_config = TetrisConfig(
+        max_pieces=max_pieces,
+        reward=rl_training_reward_config(),
+    )
     for episode in range(episodes):
-        training_env = TetrisEnv(max_pieces=max_pieces, seed=seed + episode)
+        training_env = TetrisEnv(config=training_config, seed=seed + episode)
         observation = training_env.get_observation()
         while not training_env.done:
             action = agent.select_action(training_env.decision_context())
@@ -158,23 +163,41 @@ def _train_rl(agent: "RLAgent", episodes: int, max_pieces: int, seed: int) -> No
 def _train_q_table(agent: QTableAgent, episodes: int, max_pieces: int, seed: int) -> None:
     """Train tabular Q-Learning on real transitions, then leave playback to the viewer."""
     agent.train()
+    training_config = TetrisConfig(
+        max_pieces=max_pieces,
+        reward=rl_training_reward_config(),
+    )
     for episode in range(episodes):
-        training_env = TetrisEnv(max_pieces=max_pieces, seed=seed + episode)
+        training_env = TetrisEnv(config=training_config, seed=seed + episode)
         observation = training_env.get_observation()
         episode_return = 0.0
+        task_return = 0.0
         while not training_env.done:
             action = agent.select_action(training_env.decision_context())
-            next_observation, reward, terminated, truncated, _ = training_env.step(action)
+            next_observation, reward, terminated, truncated, info = training_env.step(action)
             agent.observe(observation, action, next_observation, reward, terminated, truncated)
             observation = next_observation
             episode_return += reward
+            task_return += float(info["reward"]["task_reward"])
         agent.end_episode()
         if (episode + 1) % 100 == 0 or episode + 1 == episodes:
             print(
                 f"Q-table ep={episode + 1} score={training_env.score} "
-                f"lines={training_env.total_lines_cleared} return={episode_return:.2f} "
+                f"lines={training_env.total_lines_cleared} task-return={task_return:.2f} "
+                f"train-return={episode_return:.2f} "
                 f"entries={len(agent.q_table)} epsilon={agent.epsilon:.3f}"
             )
+
+
+def _print_genetic_compatibility_warning(model: object) -> None:
+    compatibility_issues = getattr(model, "compatibility_issues", None)
+    issues = compatibility_issues() if callable(compatibility_issues) else ()
+    if issues:
+        print(
+            "WARNING: genetic model is being used as a legacy baseline; "
+            + "; ".join(issues)
+            + ". Retrain it before claiming planning-v2 results."
+        )
 
 
 if __name__ == "__main__":
