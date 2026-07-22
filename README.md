@@ -10,26 +10,6 @@ Requer Python 3.10 ou superior.
 python -m pip install -e ".[dev]"
 ```
 
-Para usar o agente de aprendizado por reforco baseado em PyTorch, instale o
-extra de RL:
-
-```bash
-python -m pip install -e ".[dev,rl]"
-```
-
-O agente RL usa somente o `DecisionContext` publico e aprende com as
-transicoes retornadas pelo ambiente real. Treine sem abrir o visualizador:
-
-```bash
-python -m tetris_ai.cli.train_rl --steps 200000 --max-pieces 500
-```
-
-O treino de RL usa PBRS (`gamma=1`) para fornecer sinal denso, mas preserva e
-reporta separadamente `task_return`. Avaliação e ranking sempre usam a recompensa
-canônica sem shaping. O relatório inclui checkpoint, telemetria por episódio,
-resumo, gráfico e hiperparâmetros. Checkpoints registram a versão da representação,
-o horizonte e o espaço de ações; incompatibilidades são recusadas explicitamente.
-
 ## Comandos
 
 Execute os testes:
@@ -38,7 +18,7 @@ Execute os testes:
 pytest
 ```
 
-Compare o agente aleatorio com o agente baseado em estado, objetivo e busca heuristica:
+Avalie o agente baseado em estado, objetivo e busca heuristica:
 
 ```bash
 python -m tetris_ai.cli.evaluate_agents --episodes 50 --max-pieces 500 --search-depth 3 --search-strategy greedy --max-nodes-expanded 2000 --workers 0
@@ -104,7 +84,7 @@ Depois de congelar políticas e hiperparâmetros, repita como teste de estresse 
 python -m tetris_ai.cli.evaluate_agents --episodes 50 --seed 2000000 --max-pieces 1000 --genetic-model reports/genetic_agent/<run_id>/model.json --workers 0
 ```
 
-Ao incluir checkpoints Q-Learning/Double-DQN treinados em 500 peças nesse estresse,
+Ao incluir um checkpoint Q-Learning treinado em 500 peças nesse estresse,
 adicione `--allow-horizon-transfer`. A opção é explícita para impedir que uma mudança
 de contrato seja confundida acidentalmente com o benchmark principal.
 

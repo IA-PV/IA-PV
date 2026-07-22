@@ -10,7 +10,6 @@ from tetris_ai.evaluation import EpisodeResult
 from tetris_ai.reporting import (
     write_evaluation_reports,
     write_genetic_training_report,
-    write_rl_training_report,
 )
 from tetris_ai.training import GeneticAlgorithmConfig, GeneticTrainer
 from tetris_ai.reporting.statistical import (
@@ -64,8 +63,8 @@ def test_evaluation_reports_are_grouped_versioned_and_linked(tmp_path: Path) -> 
         tzinfo=timezone(timedelta(hours=-3)),
     )
     results = [
-        _episode("RandomAgent", 1, 2.0, train_reward=102.0),
-        _episode("RandomAgent", 2, 4.0, train_reward=104.0),
+        _episode("StateGoalHeuristicAgent", 1, 2.0, train_reward=102.0),
+        _episode("StateGoalHeuristicAgent", 2, 4.0, train_reward=104.0),
         _episode("GeneticAgent", 1, 8.0, train_reward=8.0),
         _episode("GeneticAgent", 2, 12.0, train_reward=12.0),
     ]
@@ -75,7 +74,7 @@ def test_evaluation_reports_are_grouped_versioned_and_linked(tmp_path: Path) -> 
         reports_root,
         experiment={"episodes": 2, "max_pieces": 5},
         agent_configurations={
-            "RandomAgent": [{"seed": 1}, {"seed": 2}],
+            "StateGoalHeuristicAgent": [{"seed": 1}, {"seed": 2}],
             "GeneticAgent": [{"chromosome_id": "abc"}],
         },
         source_artifacts={"GeneticAgent": [checkpoint]},
@@ -86,26 +85,26 @@ def test_evaluation_reports_are_grouped_versioned_and_linked(tmp_path: Path) -> 
 
     assert bundle.run_id == "20260717T123045.123456-0300"
     assert bundle.comparison_directory == reports_root / "comparisons" / bundle.run_id
-    random_report = reports_root / "random_agent" / bundle.run_id
+    heuristic_report = reports_root / "state_goal_heuristic_agent" / bundle.run_id
     genetic_report = reports_root / "genetic_agent" / bundle.run_id
     assert bundle.agent_directories == {
-        "RandomAgent": random_report,
+        "StateGoalHeuristicAgent": heuristic_report,
         "GeneticAgent": genetic_report,
     }
-    for directory in (random_report, genetic_report, bundle.comparison_directory):
+    for directory in (heuristic_report, genetic_report, bundle.comparison_directory):
         assert directory is not None
         assert (directory / "metadata.json").is_file()
 
-    random_summary = json.loads((random_report / "summary.json").read_text(encoding="utf-8"))
-    assert random_summary["primary_metric"] == "task_return"
-    assert random_summary["metrics"]["task_return"]["mean"] == 3.0
-    assert random_summary["metrics"]["total_reward"]["mean"] == 103.0
-    assert random_summary["metrics"]["total_reward"]["sample_stddev"] > 0.0
-    assert random_summary["outcomes"]["horizon_completed"] == {
+    heuristic_summary = json.loads((heuristic_report / "summary.json").read_text(encoding="utf-8"))
+    assert heuristic_summary["primary_metric"] == "task_return"
+    assert heuristic_summary["metrics"]["task_return"]["mean"] == 3.0
+    assert heuristic_summary["metrics"]["total_reward"]["mean"] == 103.0
+    assert heuristic_summary["metrics"]["total_reward"]["sample_stddev"] > 0.0
+    assert heuristic_summary["outcomes"]["horizon_completed"] == {
         "count": 2,
         "rate": 1.0,
     }
-    assert random_summary["rates"]["game_over"] == 0.0
+    assert heuristic_summary["rates"]["game_over"] == 0.0
     metadata = json.loads((genetic_report / "metadata.json").read_text(encoding="utf-8"))
     assert metadata["schema_version"] == 3
     assert metadata["duration_seconds"] == 3.0
@@ -125,7 +124,7 @@ def test_evaluation_reports_are_grouped_versioned_and_linked(tmp_path: Path) -> 
         newline="", encoding="utf-8"
     ) as source:
         comparison_rows = list(csv.DictReader(source))
-    assert [row["agent"] for row in comparison_rows] == ["RandomAgent", "GeneticAgent"]
+    assert [row["agent"] for row in comparison_rows] == ["StateGoalHeuristicAgent", "GeneticAgent"]
     assert "task_return_ci95_low" in comparison_rows[0]
     assert comparison_rows[0]["horizon_completed_rate"] == "1.0"
     assert "total_reward_ci95_low" in comparison_rows[0]
@@ -137,7 +136,7 @@ def test_evaluation_reports_are_grouped_versioned_and_linked(tmp_path: Path) -> 
     )
     assert comparison_summary["primary_metric"] == "task_return"
     paired = comparison_summary["paired_task_return"][0]
-    assert paired["reference_agent"] == "RandomAgent"
+    assert paired["reference_agent"] == "StateGoalHeuristicAgent"
     assert paired["comparison_agent"] == "GeneticAgent"
     assert paired["difference_statistics"]["mean"] == 7.0
     assert paired["comparison_wins"] == 2
@@ -160,7 +159,7 @@ def test_evaluation_reports_are_grouped_versioned_and_linked(tmp_path: Path) -> 
 
 def test_same_timestamp_never_overwrites_an_existing_report(tmp_path: Path) -> None:
     timestamp = datetime(2026, 7, 17, tzinfo=timezone.utc)
-    results = [_episode("RandomAgent", 1, 1.0)]
+    results = [_episode("StateGoalHeuristicAgent", 1, 1.0)]
 
     first = write_evaluation_reports(
         results,
@@ -178,17 +177,17 @@ def test_same_timestamp_never_overwrites_an_existing_report(tmp_path: Path) -> N
     )
 
     assert second.run_id == first.run_id + "-02"
-    assert first.agent_directories["RandomAgent"].is_dir()
-    assert second.agent_directories["RandomAgent"].is_dir()
+    assert first.agent_directories["StateGoalHeuristicAgent"].is_dir()
+    assert second.agent_directories["StateGoalHeuristicAgent"].is_dir()
     assert (
-        first.agent_directories["RandomAgent"] / "metrics.svg"
+        first.agent_directories["StateGoalHeuristicAgent"] / "metrics.svg"
     ).read_bytes() == (
-        second.agent_directories["RandomAgent"] / "metrics.svg"
+        second.agent_directories["StateGoalHeuristicAgent"] / "metrics.svg"
     ).read_bytes()
     assert (
-        first.agent_directories["RandomAgent"] / "metrics.png"
+        first.agent_directories["StateGoalHeuristicAgent"] / "metrics.png"
     ).read_bytes() == (
-        second.agent_directories["RandomAgent"] / "metrics.png"
+        second.agent_directories["StateGoalHeuristicAgent"] / "metrics.png"
     ).read_bytes()
 
 
@@ -248,7 +247,7 @@ def test_genetic_training_report_contains_canonical_model_history_and_chart(
     assert metadata["artifacts"]["model.json"]["sha256"]
 
 
-def test_evaluation_cli_publishes_the_default_agents(tmp_path: Path, monkeypatch) -> None:
+def test_evaluation_cli_publishes_the_default_agent(tmp_path: Path, monkeypatch) -> None:
     from tetris_ai.cli.evaluate_agents import main
 
     reports_root = tmp_path / "reports"
@@ -272,66 +271,11 @@ def test_evaluation_cli_publishes_the_default_agents(tmp_path: Path, monkeypatch
 
     main()
 
-    assert len(list((reports_root / "random_agent").iterdir())) == 1
+    # With no baseline or checkpoint, the default run evaluates a single agent,
+    # so a paired comparison report is not produced.
     assert len(list((reports_root / "state_goal_heuristic_agent").iterdir())) == 1
-    assert len(list((reports_root / "comparisons").iterdir())) == 1
-
-
-def test_rl_training_report_contains_checkpoint_and_episode_telemetry(
-    tmp_path: Path,
-) -> None:
-    class FakeRLAgent:
-        experience_steps = 1
-        episodes_completed = 1
-        epsilon = 0.75
-        last_loss = 0.25
-
-        def configuration(self) -> dict[str, object]:
-            return {"hidden_dim": 8, "batch_size": 1}
-
-        def save(self, destination: Path) -> None:
-            destination.write_bytes(b"checkpoint fixture")
-
-    agent = FakeRLAgent()
-    episodes = [
-        {
-            "episode": 1,
-            "seed": 3,
-            "steps": 1,
-            "score": 100,
-            "lines_removed": 1,
-            "pieces_placed": 1,
-            "total_reward": 10.0,
-            "termination_reason": "piece_limit",
-            "terminated": False,
-            "truncated": True,
-            "stopped_by_step_budget": False,
-            "epsilon": 0.75,
-            "last_loss": 0.25,
-        }
-    ]
-
-    bundle = write_rl_training_report(
-        agent,
-        episodes,
-        tmp_path,
-        experiment={"total_steps": 1, "max_pieces": 1},
-    )
-
-    directory = bundle.agent_directories["RLAgent"]
-    assert (directory / "checkpoint.pt").stat().st_size > 0
-    summary = json.loads((directory / "summary.json").read_text(encoding="utf-8"))
-    metadata = json.loads((directory / "metadata.json").read_text(encoding="utf-8"))
-    assert summary["experience_steps"] == 1
-    assert summary["primary_metric"] == "task_return"
-    assert summary["metrics"]["task_return"]["mean"] == 10.0
-    assert summary["rates"] == {
-        "game_over": 0.0,
-        "horizon_completed": 0.0,
-        "truncated": 1.0,
-    }
-    assert metadata["configuration"]["hidden_dim"] == 8
-    assert (directory / "training.png").read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
+    assert not (reports_root / "random_agent").exists()
+    assert not (reports_root / "comparisons").exists()
 
 
 def test_student_t_interval_and_singleton_uncertainty_are_explicit() -> None:

@@ -6,7 +6,6 @@ from pathlib import Path
 from ..agents import (
     GeneticAgent,
     QTableAgent,
-    RandomAgent,
     StateGoalHeuristicAgent,
     load_genetic_model,
 )
@@ -18,7 +17,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Open a graphical viewer and watch a Tetris agent play.")
     parser.add_argument(
         "--agent",
-        choices=("state-goal", "genetic", "random", "rl", "q-table"),
+        choices=("state-goal", "genetic", "q-table"),
         default="state-goal",
     )
     parser.add_argument("--seed", type=int, default=0)
@@ -55,8 +54,6 @@ def main() -> None:
         default=0.85,
         help="Multiplier applied to the animation delay for each level.",
     )
-    parser.add_argument("--rl-train-episodes", type=int, default=0, help="Episodes to train an RL agent before opening the viewer.")
-    parser.add_argument("--rl-checkpoint", type=Path, default=None, help="Optional RL checkpoint to load and/or save.")
     parser.add_argument(
         "--q-table-train-episodes",
         type=int,
@@ -77,8 +74,6 @@ def main() -> None:
         parser.error("--max-nodes-expanded must be non-negative.")
     if args.beam_width is not None and args.beam_width <= 0:
         parser.error("--beam-width must be positive.")
-    if args.rl_train_episodes < 0:
-        parser.error("--rl-train-episodes cannot be negative.")
     if args.q_table_train_episodes < 0:
         parser.error("--q-table-train-episodes cannot be negative.")
     if args.delay_ms <= 0 or args.min_delay_ms <= 0:
@@ -91,9 +86,7 @@ def main() -> None:
         parser.error("--genetic-generation is only valid with --agent genetic.")
 
     env = TetrisEnv(max_pieces=args.max_pieces, seed=args.seed)
-    if args.agent == "random":
-        agent = RandomAgent(seed=args.seed)
-    elif args.agent == "state-goal":
+    if args.agent == "state-goal":
         agent = StateGoalHeuristicAgent(
             search_depth=args.search_depth,
             search_strategy=args.search_strategy,
@@ -115,24 +108,6 @@ def main() -> None:
             )
         except ValueError as error:
             parser.error(str(error))
-    elif args.agent == "rl":
-        # Keep PyTorch optional for users who only run the heuristic agents.
-        from ..agents.rl_agent import RLAgent
-
-        agent = RLAgent(max_pieces=args.max_pieces, seed=args.seed)
-        if args.rl_checkpoint is not None and args.rl_checkpoint.exists():
-            try:
-                agent.load(args.rl_checkpoint)
-            except ValueError as error:
-                parser.error(f"Cannot load RL checkpoint: {error} Retrain it with tetris_ai.cli.train_rl.")
-        elif args.rl_checkpoint is not None and args.rl_train_episodes == 0:
-            parser.error("Checkpoint not found. Supply --rl-train-episodes to create it.")
-
-        if args.rl_train_episodes:
-            _train_rl(agent, args.rl_train_episodes, args.max_pieces, args.seed)
-            if args.rl_checkpoint is not None:
-                agent.save(args.rl_checkpoint)
-        agent.eval()
     else:
         agent = QTableAgent(max_pieces=args.max_pieces, seed=args.seed)
         if args.q_table_checkpoint is not None and args.q_table_checkpoint.exists():
@@ -156,29 +131,6 @@ def main() -> None:
         min_delay_ms=args.min_delay_ms,
         level_speed_factor=args.level_speed_factor,
     ).run()
-
-
-def _train_rl(agent: "RLAgent", episodes: int, max_pieces: int, seed: int) -> None:
-    agent.train()
-    training_config = TetrisConfig(
-        max_pieces=max_pieces,
-        reward=rl_training_reward_config(),
-    )
-    for episode in range(episodes):
-        training_env = TetrisEnv(config=training_config, seed=seed + episode)
-        observation = training_env.get_observation()
-        while not training_env.done:
-            action = agent.select_action(training_env.decision_context())
-            next_observation, reward, terminated, truncated, _ = training_env.step(action)
-            agent.observe(observation, action, next_observation, reward, terminated, truncated)
-            observation = next_observation
-        agent.end_episode()
-        if (episode + 1) % 100 == 0 or episode + 1 == episodes:
-            print(
-                f"RL ep={episode + 1} lines={training_env.total_lines_cleared} "
-                f"replay={len(agent.replay_buffer)} epsilon={agent.epsilon:.3f} "
-                f"loss={agent.last_loss}"
-            )
 
 
 def _train_q_table(agent: QTableAgent, episodes: int, max_pieces: int, seed: int) -> None:

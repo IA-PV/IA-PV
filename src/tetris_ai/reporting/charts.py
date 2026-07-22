@@ -377,11 +377,9 @@ def _group_results(
 
 def _agent_label(agent_name: str) -> str:
     return {
-        "RandomAgent": "Aleatório",
         "StateGoalHeuristicAgent": "Heurístico",
         "GeneticAgent": "Genético",
         "QTableAgent": "Q-Learning",
-        "RLAgent": "Double-DQN",
     }.get(agent_name, agent_name.removesuffix("Agent"))
 
 

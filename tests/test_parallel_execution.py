@@ -26,7 +26,7 @@ def test_worker_count_is_bounded_by_available_tasks() -> None:
     assert resolve_worker_count(20, 3) == 3
 
 
-def test_three_agent_evaluation_is_identical_serial_and_parallel() -> None:
+def test_agent_evaluation_is_identical_serial_and_parallel() -> None:
     tasks = _build_evaluation_tasks(
         episodes=1,
         first_seed=41,
@@ -35,7 +35,6 @@ def test_three_agent_evaluation_is_identical_serial_and_parallel() -> None:
         beam_width=1,
         genetic_model=_genetic_model(),
         q_table_checkpoint=None,
-        rl_checkpoint=None,
     )
 
     serial = _execute_evaluation_tasks(tasks, worker_count=1)
@@ -57,7 +56,6 @@ def test_three_agent_evaluation_is_identical_serial_and_parallel() -> None:
             assert serial_result.pop(timing_metric) >= 0.0
         assert parallel_result == serial_result
     assert [output.result.agent for output in parallel] == [
-        "RandomAgent",
         "StateGoalHeuristicAgent",
         "GeneticAgent",
     ]

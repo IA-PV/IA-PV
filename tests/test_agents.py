@@ -1,19 +1,11 @@
 from tetris_ai.agents import (
     HeuristicAgent,
     HeuristicSearchAgent,
-    RandomAgent,
     StateGoalHeuristicAgent,
     TetrisSearchProblem,
 )
 from tetris_ai.env import TetrisEnv
 from tetris_ai.evaluation import evaluate_episode
-
-
-def test_random_agent_selects_legal_action() -> None:
-    env = TetrisEnv(seed=5)
-    context = env.decision_context()
-    action = RandomAgent(seed=9).select_action(context)
-    assert action in env.legal_actions()
 
 
 def test_heuristic_agent_selects_action_and_can_step() -> None:

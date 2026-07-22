@@ -13,7 +13,6 @@ from ..agents import (
     GeneticAgent,
     GeneticModel,
     QTableAgent,
-    RandomAgent,
     StateGoalHeuristicAgent,
     load_genetic_model,
 )
@@ -89,15 +88,10 @@ def main() -> None:
         help="Optional JSON produced by train_genetic_agent; includes GeneticAgent in the comparison.",
     )
     parser.add_argument(
-        "--rl-checkpoint",
-        type=Path,
-        help="Optional checkpoint produced by train_rl; includes RLAgent in the comparison.",
-    )
-    parser.add_argument(
         "--allow-horizon-transfer",
         action="store_true",
         help=(
-            "Allow Q/RL checkpoints trained at another max-pieces horizon. "
+            "Allow a Q-table checkpoint trained at another max-pieces horizon. "
             "Use only for a declared frozen-policy stress test."
         ),
     )
@@ -125,8 +119,6 @@ def main() -> None:
         parser.error("--beam-width must be positive.")
     if args.q_table_checkpoint is not None and not args.q_table_checkpoint.is_file():
         parser.error("--q-table-checkpoint must point to an existing checkpoint file.")
-    if args.rl_checkpoint is not None and not args.rl_checkpoint.is_file():
-        parser.error("--rl-checkpoint must point to an existing checkpoint file.")
     if args.workers < 0:
         parser.error("--workers must be zero or a positive integer.")
 
@@ -155,7 +147,6 @@ def main() -> None:
         beam_width=args.beam_width,
         genetic_model=genetic_model,
         q_table_checkpoint=args.q_table_checkpoint,
-        rl_checkpoint=args.rl_checkpoint,
         allow_horizon_transfer=args.allow_horizon_transfer,
     )
     worker_count = resolve_worker_count(args.workers, len(tasks))
@@ -193,8 +184,6 @@ def main() -> None:
         source_artifacts["QTableAgent"] = [args.q_table_checkpoint]
     if args.genetic_model is not None:
         source_artifacts["GeneticAgent"] = [args.genetic_model]
-    if args.rl_checkpoint is not None:
-        source_artifacts["RLAgent"] = [args.rl_checkpoint]
     reports = write_evaluation_reports(
         results,
         args.reports_root,
@@ -237,7 +226,6 @@ def _build_evaluation_tasks(
     beam_width: int | None = None,
     genetic_model: GeneticModel | None = None,
     q_table_checkpoint: Path | None = None,
-    rl_checkpoint: Path | None = None,
     search_strategy: str = "greedy",
     max_nodes_expanded: int | None = 2_000,
     allow_horizon_transfer: bool = False,
@@ -245,18 +233,15 @@ def _build_evaluation_tasks(
     tasks: list[_EvaluationTask] = []
     for episode in range(episodes):
         seed = first_seed + episode
-        tasks.extend(
-            (
-                _EvaluationTask("random", seed, max_pieces),
-                _EvaluationTask(
-                    "state_goal",
-                    seed,
-                    max_pieces,
-                    search_depth=search_depth,
-                    search_strategy=search_strategy,
-                    max_nodes_expanded=max_nodes_expanded,
-                    beam_width=beam_width,
-                ),
+        tasks.append(
+            _EvaluationTask(
+                "state_goal",
+                seed,
+                max_pieces,
+                search_depth=search_depth,
+                search_strategy=search_strategy,
+                max_nodes_expanded=max_nodes_expanded,
+                beam_width=beam_width,
             )
         )
         if q_table_checkpoint is not None:
@@ -276,16 +261,6 @@ def _build_evaluation_tasks(
                     seed,
                     max_pieces,
                     genetic_model=genetic_model,
-                )
-            )
-        if rl_checkpoint is not None:
-            tasks.append(
-                _EvaluationTask(
-                    "rl",
-                    seed,
-                    max_pieces,
-                    checkpoint=rl_checkpoint,
-                    allow_horizon_transfer=allow_horizon_transfer,
                 )
             )
     return tasks
@@ -315,8 +290,6 @@ def _evaluate_task(task: _EvaluationTask) -> _EvaluationOutput:
 
 
 def _agent_for_task(task: _EvaluationTask) -> Agent:
-    if task.agent_kind == "random":
-        return RandomAgent(task.seed)
     if task.agent_kind == "state_goal":
         return StateGoalHeuristicAgent(
             search_depth=task.search_depth,
@@ -340,17 +313,6 @@ def _agent_for_task(task: _EvaluationTask) -> Agent:
             task.genetic_model.chromosome,
             task.genetic_model.policy_config,
         )
-    if task.agent_kind == "rl":
-        if task.checkpoint is None:
-            raise ValueError("RL evaluation requires a checkpoint.")
-        from ..agents import RLAgent
-
-        agent = RLAgent(seed=task.seed, max_pieces=task.max_pieces)
-        agent.load(
-            task.checkpoint,
-            allow_horizon_transfer=task.allow_horizon_transfer,
-        )
-        return agent.eval()
     raise ValueError(f"Unknown evaluation agent kind: {task.agent_kind!r}.")
 
 
