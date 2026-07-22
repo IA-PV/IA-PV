@@ -31,7 +31,9 @@ class _EvaluationTask:
     seed: int
     max_pieces: int
     search_depth: int = 3
-    beam_width: int = 8
+    search_strategy: str = "greedy"
+    max_nodes_expanded: int | None = 2_000
+    beam_width: int | None = None
     genetic_model: GeneticModel | None = None
     checkpoint: Path | None = None
     allow_horizon_transfer: bool = False
@@ -56,8 +58,25 @@ def main() -> None:
             "Keep this range isolated from training and validation seeds."
         ),
     )
-    parser.add_argument("--search-depth", type=int, default=3, help="Maximum depth used by the state/goal heuristic-search agent.")
-    parser.add_argument("--beam-width", type=int, default=8, help="Number of best immediate actions expanded by beam search.")
+    parser.add_argument("--search-depth", type=int, default=3, help="Maximum visible-piece lookahead depth.")
+    parser.add_argument(
+        "--search-strategy",
+        choices=("greedy", "astar"),
+        default="greedy",
+        help="Best-first priority: h(n) for greedy or g(n)+h(n) for A*.",
+    )
+    parser.add_argument(
+        "--max-nodes-expanded",
+        type=int,
+        default=2_000,
+        help="Per-plan expansion budget; use 0 for an exhaustive search.",
+    )
+    parser.add_argument(
+        "--beam-width",
+        type=int,
+        default=None,
+        help="Deprecated compatibility option for older heuristic-agent commands.",
+    )
     parser.add_argument(
         "--q-table-checkpoint",
         type=Path,
@@ -98,8 +117,12 @@ def main() -> None:
         ),
     )
     args = parser.parse_args()
-    if args.episodes <= 0 or args.max_pieces <= 0 or args.search_depth <= 0 or args.beam_width <= 0:
-        parser.error("--episodes, --max-pieces, --search-depth, and --beam-width must be positive.")
+    if args.episodes <= 0 or args.max_pieces <= 0 or args.search_depth <= 0:
+        parser.error("--episodes, --max-pieces, and --search-depth must be positive.")
+    if args.max_nodes_expanded < 0:
+        parser.error("--max-nodes-expanded must be non-negative.")
+    if args.beam_width is not None and args.beam_width <= 0:
+        parser.error("--beam-width must be positive.")
     if args.q_table_checkpoint is not None and not args.q_table_checkpoint.is_file():
         parser.error("--q-table-checkpoint must point to an existing checkpoint file.")
     if args.rl_checkpoint is not None and not args.rl_checkpoint.is_file():
@@ -127,6 +150,8 @@ def main() -> None:
         first_seed=args.seed,
         max_pieces=args.max_pieces,
         search_depth=args.search_depth,
+        search_strategy=args.search_strategy,
+        max_nodes_expanded=args.max_nodes_expanded or None,
         beam_width=args.beam_width,
         genetic_model=genetic_model,
         q_table_checkpoint=args.q_table_checkpoint,
@@ -156,6 +181,8 @@ def main() -> None:
             f"train-reward={result.total_reward:8.2f} "
             f"decision-p95={result.p95_decision_time_ms:8.2f}ms "
             f"depth={result.search_depth:2}/{result.effective_search_depth:1} "
+            f"search={result.search_strategy or 'n/a':6} "
+            f"budget={result.max_nodes_expanded:5} "
             f"beam={result.beam_width:2} "
             f"nodes={result.nodes_expanded:6} end={result.termination_reason}"
         )
@@ -177,6 +204,10 @@ def main() -> None:
             "seeds": list(range(args.seed, args.seed + args.episodes)),
             "environment_config_id": environment_config.fingerprint,
             "environment_config": asdict(environment_config),
+            "search_depth": args.search_depth,
+            "search_strategy": args.search_strategy,
+            "max_nodes_expanded": args.max_nodes_expanded or None,
+            "beam_width": args.beam_width,
             "workers_requested": args.workers,
             "worker_processes": worker_count,
             "allow_horizon_transfer": args.allow_horizon_transfer,
@@ -203,10 +234,12 @@ def _build_evaluation_tasks(
     first_seed: int,
     max_pieces: int,
     search_depth: int,
-    beam_width: int,
-    genetic_model: GeneticModel | None,
-    q_table_checkpoint: Path | None,
-    rl_checkpoint: Path | None,
+    beam_width: int | None = None,
+    genetic_model: GeneticModel | None = None,
+    q_table_checkpoint: Path | None = None,
+    rl_checkpoint: Path | None = None,
+    search_strategy: str = "greedy",
+    max_nodes_expanded: int | None = 2_000,
     allow_horizon_transfer: bool = False,
 ) -> list[_EvaluationTask]:
     tasks: list[_EvaluationTask] = []
@@ -220,6 +253,8 @@ def _build_evaluation_tasks(
                     seed,
                     max_pieces,
                     search_depth=search_depth,
+                    search_strategy=search_strategy,
+                    max_nodes_expanded=max_nodes_expanded,
                     beam_width=beam_width,
                 ),
             )
@@ -285,6 +320,8 @@ def _agent_for_task(task: _EvaluationTask) -> Agent:
     if task.agent_kind == "state_goal":
         return StateGoalHeuristicAgent(
             search_depth=task.search_depth,
+            search_strategy=task.search_strategy,
+            max_nodes_expanded=task.max_nodes_expanded,
             beam_width=task.beam_width,
         )
     if task.agent_kind == "q_table":

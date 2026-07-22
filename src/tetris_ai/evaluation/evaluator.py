@@ -28,6 +28,10 @@ class EpisodeResult:
     policy_id: str | None = None
     search_depth: int = 0
     effective_search_depth: int = 0
+    search_strategy: str = ""
+    max_nodes_expanded: int = 0
+    # Retained in the exported schema for historical CSV compatibility.  The
+    # heuristic search no longer uses a beam width.
     beam_width: int = 0
     decisions_made: int = 0
     nodes_expanded: int = 0
@@ -94,6 +98,8 @@ def evaluate_episode(agent: Agent, seed: int, max_pieces: int = 500) -> EpisodeR
         policy_id=decision_metrics["policy_id"],
         search_depth=decision_metrics["search_depth"],
         effective_search_depth=decision_metrics["effective_search_depth"],
+        search_strategy=decision_metrics["search_strategy"],
+        max_nodes_expanded=decision_metrics["max_nodes_expanded"],
         beam_width=decision_metrics["beam_width"],
         decisions_made=decision_metrics["decisions_made"],
         nodes_expanded=decision_metrics["nodes_expanded"],
@@ -161,6 +167,8 @@ def _decision_metrics_for(agent: Agent) -> dict[str, int | float | str | None]:
         else None,
         "search_depth": int(raw_metrics.get("search_depth", 0) or 0),
         "effective_search_depth": int(raw_metrics.get("effective_search_depth", 0) or 0),
+        "search_strategy": str(raw_metrics.get("search_strategy", "") or ""),
+        "max_nodes_expanded": int(raw_metrics.get("max_nodes_expanded", 0) or 0),
         "beam_width": int(raw_metrics.get("beam_width", 0) or 0),
         "decisions_made": int(raw_metrics.get("decisions_made", 0) or 0),
         "nodes_expanded": int(raw_metrics.get("nodes_expanded", 0) or 0),
@@ -174,6 +182,8 @@ def _empty_decision_metrics() -> dict[str, int | float | str | None]:
         "policy_id": None,
         "search_depth": 0,
         "effective_search_depth": 0,
+        "search_strategy": "",
+        "max_nodes_expanded": 0,
         "beam_width": 0,
         "decisions_made": 0,
         "nodes_expanded": 0,

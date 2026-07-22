@@ -26,6 +26,22 @@ As dependencias seguem `core -> env -> agents/evaluation -> training/reporting -
 
 `DecisionContext` e a fronteira publica dos agentes. Ele contem observacao e acoes legais e oferece simulacoes construidas sem RNG, limitadas a fila visivel. Essa separacao evita que uma busca descubra a sequencia secreta do 7-bag.
 
+O agente heuristico transforma esse contrato em um `TetrisSearchProblem`
+explicito. Seu estado contem matriz, peca corrente, fila publica (o estado do
+gerador que e observavel), hold e a posicao final da peca travada. As acoes sao
+as colocacoes finais por rotacao e coluna; portanto cada transicao trava uma
+peca e acrescenta uma unidade ao custo de caminho `g(n)`.
+
+Como Tetris nao possui uma vitoria terminal, o objetivo e local ao horizonte:
+travar a peca atual e as pecas de lookahead visiveis no tabuleiro de menor
+custo. A heuristica de custo e `h(n) = 35.6 * buracos + 0.51 *
+altura_agregada`, com penalidade adicional para game over. `HeuristicSearchAgent`
+mantem um plano interno e o reutiliza antes de formular o proximo problema. A
+fronteira e uma fila de prioridade para busca gulosa (`h`) ou A* (`g+h`), nunca
+um feixe de acoes. Um orcamento configuravel de expansoes protege o
+planejamento de lookahead profundo; ele pode ser removido em experimentos
+exhaustivos.
+
 ## Transicao
 
 `reset(seed)` retorna `(observation, info)`. `step(action)` retorna `(observation, reward, terminated, truncated, info)`. A propriedade `done` permanece disponível como `terminated or truncated`. O motivo explícito diferencia `game_over`, término do MDP (`horizon_completed`) e cortes externos (`piece_limit`/`preview_horizon`).
@@ -81,7 +97,7 @@ Execute:
 
 ```bash
 python -m pytest
-python -m tetris_ai.cli.evaluate_agents --episodes 50 --max-pieces 500 --search-depth 3 --beam-width 8 --workers 0
+python -m tetris_ai.cli.evaluate_agents --episodes 50 --max-pieces 500 --search-depth 3 --search-strategy greedy --max-nodes-expanded 2000 --workers 0
 ```
 
 ## Limitacoes intencionais

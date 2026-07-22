@@ -24,7 +24,19 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--max-pieces", type=int, default=CANONICAL_MAX_PIECES)
     parser.add_argument("--search-depth", type=int, default=3)
-    parser.add_argument("--beam-width", type=int, default=8)
+    parser.add_argument("--search-strategy", choices=("greedy", "astar"), default="greedy")
+    parser.add_argument(
+        "--max-nodes-expanded",
+        type=int,
+        default=2_000,
+        help="Per-plan expansion budget; use 0 for an exhaustive search.",
+    )
+    parser.add_argument(
+        "--beam-width",
+        type=int,
+        default=None,
+        help="Deprecated compatibility option for older heuristic-agent commands.",
+    )
     parser.add_argument(
         "--genetic-model",
         type=Path,
@@ -59,8 +71,12 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    if args.max_pieces <= 0 or args.search_depth <= 0 or args.beam_width <= 0:
-        parser.error("--max-pieces, --search-depth, and --beam-width must be positive.")
+    if args.max_pieces <= 0 or args.search_depth <= 0:
+        parser.error("--max-pieces and --search-depth must be positive.")
+    if args.max_nodes_expanded < 0:
+        parser.error("--max-nodes-expanded must be non-negative.")
+    if args.beam_width is not None and args.beam_width <= 0:
+        parser.error("--beam-width must be positive.")
     if args.rl_train_episodes < 0:
         parser.error("--rl-train-episodes cannot be negative.")
     if args.q_table_train_episodes < 0:
@@ -78,7 +94,12 @@ def main() -> None:
     if args.agent == "random":
         agent = RandomAgent(seed=args.seed)
     elif args.agent == "state-goal":
-        agent = StateGoalHeuristicAgent(search_depth=args.search_depth, beam_width=args.beam_width)
+        agent = StateGoalHeuristicAgent(
+            search_depth=args.search_depth,
+            search_strategy=args.search_strategy,
+            max_nodes_expanded=args.max_nodes_expanded or None,
+            beam_width=args.beam_width,
+        )
     elif args.agent == "genetic":
         if args.genetic_model is None:
             parser.error("--genetic-model is required when --agent genetic is selected.")

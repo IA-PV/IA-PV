@@ -41,13 +41,17 @@ pytest
 Compare o agente aleatorio com o agente baseado em estado, objetivo e busca heuristica:
 
 ```bash
-python -m tetris_ai.cli.evaluate_agents --episodes 50 --max-pieces 500 --search-depth 3 --beam-width 8 --workers 0
+python -m tetris_ai.cli.evaluate_agents --episodes 50 --max-pieces 500 --search-depth 3 --search-strategy greedy --max-nodes-expanded 2000 --workers 0
 ```
 
 `--workers 0` distribui partidas independentes entre todos os processadores
 logicos, preservando um para o sistema operacional. Use `--workers 1` para a
 execucao serial ou um numero explicito, como `--workers 4`, para limitar o uso
 de CPU e memoria.
+
+Use `--search-strategy greedy` para priorizar `h(n)`, ou `--search-strategy
+astar` para priorizar `g(n) + h(n)`. Por padrao, cada planejamento possui um
+orcamento de 2.000 nos; `--max-nodes-expanded 0` remove esse limite.
 
 Cada execucao gera pastas imutaveis em `reports/<agente>/<run_id>/`, contendo o
 CSV por episodio, resumo estatistico, configuracoes, metadados de
@@ -56,6 +60,22 @@ mostra observacoes individuais, media, intervalo de confianca de 95% e uma
 analise pareada por semente. Comparacoes tambem geram
 `reports/comparisons/<run_id>/`. O formato completo esta em
 [docs/EXPERIMENT_REPORTS.md](docs/EXPERIMENT_REPORTS.md).
+
+## Agente de busca heuristica
+
+`HeuristicSearchAgent` formula um `TetrisSearchProblem` a cada vez que o
+plano interno acaba. Um estado de busca contem a matriz do tabuleiro, a peca
+corrente, a fila publica de proximas pecas (o unico estado do gerador que o
+agente pode conhecer), o hold e a posicao final da ultima peca travada. Cada
+acao e uma colocacao final `(rotacao, coluna)`, logo seu custo de caminho e
+`g(n) = 1` por peca colocada.
+
+O objetivo e travar a peca atual — e, quando ha lookahead, as pecas visiveis
+planejadas — no menor custo de tabuleiro. A heuristica minimizada e:
+
+```text
+h(n) = 35.6 * buracos + 0.51 * altura_agregada
+```
 
 ## Agente baseado em algoritmo genetico
 
@@ -124,7 +144,7 @@ O agente recebe `DecisionContext`, nao a instancia real de `TetrisEnv`. Simulaco
 Abra uma janela para assistir o agente jogando:
 
 ```bash
-python -m tetris_ai.cli.watch_agent --agent state-goal --seed 0 --max-pieces 500 --search-depth 3 --beam-width 8 --delay-ms 80 --min-delay-ms 18 --level-speed-factor 0.85
+python -m tetris_ai.cli.watch_agent --agent state-goal --seed 0 --max-pieces 500 --search-depth 3 --search-strategy greedy --delay-ms 80 --min-delay-ms 18 --level-speed-factor 0.85
 ```
 
 O visualizador usa o estilo da interface original, com tabuleiro à esquerda, painel lateral, `HOLD`, `NEXT`, score, level, linhas, última jogada e nós expandidos. A animação acelera a cada level: `delay = max(min_delay, round(delay_base * fator^(level - 1)))`. Esse tempo pertence somente à apresentação e não altera o contrato `planning-v2`.

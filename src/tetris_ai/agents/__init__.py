@@ -9,9 +9,16 @@ from .genetic_agent import (
     load_chromosome,
     load_genetic_model,
 )
-from .heuristic_agent import HeuristicAgent, StateGoalHeuristicAgent, TetrisGoal
+from .heuristic_agent import HeuristicAgent, HeuristicSearchAgent, StateGoalHeuristicAgent, TetrisGoal
 from .q_table_agent import QTableAgent
 from .random_agent import RandomAgent
+from .tetris_search_problem import (
+    PiecePosition,
+    SearchHeuristic,
+    TetrisPlacementGoal,
+    TetrisSearchProblem,
+    TetrisSearchState,
+)
 
 # PyTorch is an optional dependency.  Keeping this import lazy preserves the
 # lightweight core agents for installations that did not request the ``rl``
@@ -25,12 +32,18 @@ __all__ = [
     "GeneticModel",
     "GeneticPolicyConfig",
     "HeuristicAgent",
+    "HeuristicSearchAgent",
     "LinearChromosome",
+    "PiecePosition",
     "QTableAgent",
     "RandomAgent",
     "RLAgent",
+    "SearchHeuristic",
     "StateGoalHeuristicAgent",
     "TetrisGoal",
+    "TetrisPlacementGoal",
+    "TetrisSearchProblem",
+    "TetrisSearchState",
     "TetrisNet",
     "load_chromosome",
     "load_genetic_model",
