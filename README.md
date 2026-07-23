@@ -94,7 +94,7 @@ python -m tetris_ai.cli.train_genetic_agent --population-size 16 --generations 1
 Compare os tres agentes em sementes separadas das usadas no treino:
 
 ```bash
-python -m tetris_ai.cli.evaluate_agents --episodes 50 --seed 1000000 --max-pieces 500 --search-depth 3 --beam-width 8 --genetic-model reports/genetic_agent/<run_id>/model.json --workers 0
+python -m tetris_ai.cli.evaluate_agents --agents state-goal genetic q-table --episodes 50 --seed 1000000 --max-pieces 500 --search-depth 3 --beam-width 8 --genetic-model reports/genetic_agent/<run_id>/model.json --q-table-checkpoint reports/q_table_agent/<run_id>/checkpoint.pkl --workers 0
 ```
 
 Depois de congelar políticas e hiperparâmetros, repita como teste de estresse em

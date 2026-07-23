@@ -6,6 +6,7 @@ from .experiment_report import (
     save_genetic_history,
     write_evaluation_reports,
     write_genetic_training_report,
+    write_q_table_training_report,
     write_rl_training_report,
 )
 
@@ -15,5 +16,6 @@ __all__ = [
     "save_genetic_history",
     "write_evaluation_reports",
     "write_genetic_training_report",
+    "write_q_table_training_report",
     "write_rl_training_report",
 ]

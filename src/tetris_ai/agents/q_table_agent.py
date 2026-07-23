@@ -23,7 +23,8 @@ from .base import Agent
 
 DiscreteState: TypeAlias = tuple[str, str, str, str, str, str, str, str]
 QKey: TypeAlias = tuple[DiscreteState, int]
-_CHECKPOINT_VERSION = 2
+_CHECKPOINT_VERSION = 3
+_LEGACY_CHECKPOINT_VERSION = 2
 
 
 class QTableAgent(Agent):
@@ -231,6 +232,11 @@ class QTableAgent(Agent):
             "algorithm": "tabular-q-learning",
             "board_width": self.board_width,
             "max_pieces": self.max_pieces,
+            "epsilon_start": self.epsilon_start,
+            "epsilon_min": self.epsilon_min,
+            "epsilon_decay": self.epsilon_decay,
+            "alpha": self.alpha,
+            "gamma": self.gamma,
             "epsilon": self.epsilon,
             "transitions_observed": self.transitions_observed,
             "episodes_completed": self.episodes_completed,
@@ -255,7 +261,7 @@ class QTableAgent(Agent):
         if not isinstance(payload, dict):
             raise ValueError("Invalid Q-table checkpoint format.")
         checkpoint_version = payload.get("checkpoint_version")
-        if checkpoint_version != _CHECKPOINT_VERSION:
+        if checkpoint_version not in {_LEGACY_CHECKPOINT_VERSION, _CHECKPOINT_VERSION}:
             if checkpoint_version == 1:
                 raise ValueError(
                     "Q-table checkpoint version 1 uses the legacy four-component state schema; "
@@ -263,7 +269,7 @@ class QTableAgent(Agent):
                 )
             raise ValueError(
                 f"Unsupported Q-table checkpoint version {checkpoint_version!r}; "
-                f"expected version {_CHECKPOINT_VERSION}."
+                f"expected version {_LEGACY_CHECKPOINT_VERSION} or {_CHECKPOINT_VERSION}."
             )
         if payload.get("algorithm") != "tabular-q-learning":
             raise ValueError("Checkpoint was not created by QTableAgent.")
@@ -291,6 +297,8 @@ class QTableAgent(Agent):
                 raise ValueError("Checkpoint contains a non-finite Q-value.")
             loaded_table[key] = q_value
 
+        if checkpoint_version == _CHECKPOINT_VERSION:
+            self._load_hyperparameters(payload)
         epsilon = float(payload.get("epsilon", self.epsilon))
         if not self.epsilon_min <= epsilon <= 1.0:
             raise ValueError("Checkpoint epsilon is outside the valid range.")
@@ -298,6 +306,31 @@ class QTableAgent(Agent):
         self.epsilon = epsilon
         self.transitions_observed = int(payload.get("transitions_observed", 0))
         self.episodes_completed = int(payload.get("episodes_completed", 0))
+
+    def _load_hyperparameters(self, payload: dict[object, object]) -> None:
+        """Restore the learning contract recorded by a version-3 checkpoint."""
+
+        try:
+            epsilon_start = float(payload["epsilon_start"])
+            epsilon_min = float(payload["epsilon_min"])
+            epsilon_decay = float(payload["epsilon_decay"])
+            alpha = float(payload["alpha"])
+            gamma = float(payload["gamma"])
+        except (KeyError, TypeError, ValueError) as error:
+            raise ValueError("Checkpoint contains invalid Q-table hyperparameters.") from error
+        if not 0.0 <= epsilon_min <= epsilon_start <= 1.0:
+            raise ValueError("Checkpoint epsilon bounds are invalid.")
+        if not 0.0 < epsilon_decay <= 1.0:
+            raise ValueError("Checkpoint epsilon_decay is invalid.")
+        if not 0.0 < alpha <= 1.0:
+            raise ValueError("Checkpoint alpha is invalid.")
+        if not 0.0 <= gamma <= 1.0:
+            raise ValueError("Checkpoint gamma is invalid.")
+        self.epsilon_start = epsilon_start
+        self.epsilon_min = epsilon_min
+        self.epsilon_decay = epsilon_decay
+        self.alpha = alpha
+        self.gamma = gamma
 
     def _discretize_state(self, observation: Observation) -> DiscreteState:
         """Map a featured observation into a compact, hashable tabular state.
