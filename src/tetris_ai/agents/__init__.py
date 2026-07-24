@@ -1,4 +1,5 @@
 from .base import Agent
+from .dqn_agent import DQNAgent
 from .genetic_agent import (
     GeneticAgent,
     GeneticModel,
@@ -19,6 +20,7 @@ from .tetris_search_problem import (
 
 __all__ = [
     "Agent",
+    "DQNAgent",
     "GeneticAgent",
     "GeneticModel",
     "GeneticPolicyConfig",
