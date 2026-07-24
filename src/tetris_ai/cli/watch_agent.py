@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 
 from ..agents import (
+    DQNAgent,
     GeneticAgent,
     QTableAgent,
     StateGoalHeuristicAgent,
@@ -17,7 +18,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Open a graphical viewer and watch a Tetris agent play.")
     parser.add_argument(
         "--agent",
-        choices=("state-goal", "genetic", "q-table"),
+        choices=("state-goal", "genetic", "q-table", "dqn"),
         default="state-goal",
     )
     parser.add_argument("--seed", type=int, default=0)
@@ -66,6 +67,12 @@ def main() -> None:
         default=None,
         help="Optional tabular Q-Learning checkpoint to load and/or save.",
     )
+    parser.add_argument(
+        "--dqn-checkpoint",
+        type=Path,
+        default=None,
+        help="DQN checkpoint produced by train_dqn (required for --agent dqn).",
+    )
     args = parser.parse_args()
 
     if args.max_pieces <= 0 or args.search_depth <= 0:
@@ -108,6 +115,21 @@ def main() -> None:
             )
         except ValueError as error:
             parser.error(str(error))
+    elif args.agent == "dqn":
+        if args.dqn_checkpoint is None or not args.dqn_checkpoint.exists():
+            parser.error(
+                "--dqn-checkpoint must point to an existing checkpoint "
+                "(train it with tetris_ai.cli.train_dqn)."
+            )
+        try:
+            agent = DQNAgent.from_checkpoint(
+                args.dqn_checkpoint,
+                max_pieces=args.max_pieces,
+                seed=args.seed,
+                allow_horizon_transfer=True,
+            )
+        except ValueError as error:
+            parser.error(f"Cannot load DQN checkpoint: {error}")
     else:
         agent = QTableAgent(max_pieces=args.max_pieces, seed=args.seed)
         if args.q_table_checkpoint is not None and args.q_table_checkpoint.exists():

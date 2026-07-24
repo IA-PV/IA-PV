@@ -10,6 +10,7 @@ from statistics import fmean, stdev
 
 from ..agents import (
     Agent,
+    DQNAgent,
     GeneticAgent,
     GeneticModel,
     QTableAgent,
@@ -88,10 +89,16 @@ def main() -> None:
         help="Optional JSON produced by train_genetic_agent; includes GeneticAgent in the comparison.",
     )
     parser.add_argument(
+        "--dqn-checkpoint",
+        type=Path,
+        default=None,
+        help="Optional checkpoint produced by train_dqn; includes DQNAgent in the comparison.",
+    )
+    parser.add_argument(
         "--allow-horizon-transfer",
         action="store_true",
         help=(
-            "Allow a Q-table checkpoint trained at another max-pieces horizon. "
+            "Allow a Q-table or DQN checkpoint trained at another max-pieces horizon. "
             "Use only for a declared frozen-policy stress test."
         ),
     )
@@ -119,6 +126,8 @@ def main() -> None:
         parser.error("--beam-width must be positive.")
     if args.q_table_checkpoint is not None and not args.q_table_checkpoint.is_file():
         parser.error("--q-table-checkpoint must point to an existing checkpoint file.")
+    if args.dqn_checkpoint is not None and not args.dqn_checkpoint.is_file():
+        parser.error("--dqn-checkpoint must point to an existing checkpoint file.")
     if args.workers < 0:
         parser.error("--workers must be zero or a positive integer.")
 
@@ -147,6 +156,7 @@ def main() -> None:
         beam_width=args.beam_width,
         genetic_model=genetic_model,
         q_table_checkpoint=args.q_table_checkpoint,
+        dqn_checkpoint=args.dqn_checkpoint,
         allow_horizon_transfer=args.allow_horizon_transfer,
     )
     worker_count = resolve_worker_count(args.workers, len(tasks))
@@ -184,6 +194,8 @@ def main() -> None:
         source_artifacts["QTableAgent"] = [args.q_table_checkpoint]
     if args.genetic_model is not None:
         source_artifacts["GeneticAgent"] = [args.genetic_model]
+    if args.dqn_checkpoint is not None:
+        source_artifacts["DQNAgent"] = [args.dqn_checkpoint]
     reports = write_evaluation_reports(
         results,
         args.reports_root,
@@ -226,6 +238,7 @@ def _build_evaluation_tasks(
     beam_width: int | None = None,
     genetic_model: GeneticModel | None = None,
     q_table_checkpoint: Path | None = None,
+    dqn_checkpoint: Path | None = None,
     search_strategy: str = "greedy",
     max_nodes_expanded: int | None = 2_000,
     allow_horizon_transfer: bool = False,
@@ -261,6 +274,16 @@ def _build_evaluation_tasks(
                     seed,
                     max_pieces,
                     genetic_model=genetic_model,
+                )
+            )
+        if dqn_checkpoint is not None:
+            tasks.append(
+                _EvaluationTask(
+                    "dqn",
+                    seed,
+                    max_pieces,
+                    checkpoint=dqn_checkpoint,
+                    allow_horizon_transfer=allow_horizon_transfer,
                 )
             )
     return tasks
@@ -312,6 +335,15 @@ def _agent_for_task(task: _EvaluationTask) -> Agent:
         return GeneticAgent(
             task.genetic_model.chromosome,
             task.genetic_model.policy_config,
+        )
+    if task.agent_kind == "dqn":
+        if task.checkpoint is None:
+            raise ValueError("DQN evaluation requires a checkpoint.")
+        return DQNAgent.from_checkpoint(
+            task.checkpoint,
+            max_pieces=task.max_pieces,
+            seed=task.seed,
+            allow_horizon_transfer=task.allow_horizon_transfer,
         )
     raise ValueError(f"Unknown evaluation agent kind: {task.agent_kind!r}.")
 
