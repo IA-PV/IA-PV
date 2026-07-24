@@ -275,6 +275,7 @@ def write_genetic_training_charts(
     best = [stats.best_fitness for stats in history]
     mean = [stats.mean_fitness for stats in history]
     worst = [stats.worst_fitness for stats in history]
+    monitoring = [stats.monitoring_fitness for stats in history]
     with plt.rc_context(_RC_PARAMS):
         figure, axes = plt.subplots(2, 2, figsize=(13, 9), squeeze=False)
         figure.suptitle(
@@ -291,17 +292,46 @@ def write_genetic_training_charts(
             alpha=0.14,
             label="Faixa pior–melhor",
         )
-        fitness_axis.plot(generations, best, color=_COLORS[2], marker="o", label="Melhor")
-        fitness_axis.plot(generations, mean, color=_COLORS[0], marker="o", label="Média")
-        fitness_axis.plot(generations, worst, color=_COLORS[1], marker="o", label="Pior")
-        fitness_axis.set_title("Retorno limpo da tarefa na população")
+        fitness_axis.plot(
+            generations,
+            best,
+            color=_COLORS[2],
+            marker="o",
+            alpha=0.55,
+            label="Melhor no lote rotativo",
+        )
+        fitness_axis.plot(
+            generations,
+            mean,
+            color=_COLORS[0],
+            marker="o",
+            alpha=0.45,
+            label="Média no lote rotativo",
+        )
+        fitness_axis.plot(
+            generations,
+            worst,
+            color=_COLORS[1],
+            marker="o",
+            alpha=0.35,
+            label="Pior no lote rotativo",
+        )
+        fitness_axis.plot(
+            generations,
+            monitoring,
+            color=_COLORS[3],
+            marker="D",
+            linewidth=2.4,
+            label="Melhor em seeds fixas de monitoramento",
+        )
+        fitness_axis.set_title("Retorno: treino rotativo vs. monitoramento comparável")
         fitness_axis.set_ylabel("Retorno da tarefa (fitness)")
         fitness_axis.legend(frameon=False)
 
         training_metrics = (
-            (axes[0][1], "best_mean_lines", "Linhas do melhor indivíduo"),
-            (axes[1][0], "best_mean_score", "Score do melhor indivíduo"),
-            (axes[1][1], "best_mean_pieces", "Peças do melhor indivíduo"),
+            (axes[0][1], "monitoring_mean_lines", "Linhas nas seeds fixas"),
+            (axes[1][0], "monitoring_mean_score", "Score nas seeds fixas"),
+            (axes[1][1], "monitoring_mean_pieces", "Peças nas seeds fixas"),
         )
         for index, (axis, attribute, label) in enumerate(training_metrics, start=1):
             axis.plot(

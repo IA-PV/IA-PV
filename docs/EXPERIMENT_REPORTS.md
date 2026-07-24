@@ -117,26 +117,35 @@ Avaliar os agentes basicos:
 python -m tetris_ai.cli.evaluate_agents --episodes 50 --seed 1000000 --max-pieces 500 --workers 0
 ```
 
-Avaliar os tres agentes do trabalho — aleatorio, busca heuristica e genetico —
-usando as mesmas sementes:
+Avaliar exatamente os tres agentes do trabalho — busca heuristica, genetico e
+Q-table — usando as mesmas sementes:
 
 ```bash
 python -m tetris_ai.cli.evaluate_agents \
+  --agents state-goal genetic q-table \
   --genetic-model reports/genetic_agent/<run_id>/model.json \
+  --q-table-checkpoint reports/q_table_agent/<run_id>/checkpoint.pkl \
   --episodes 50 --seed 1000000 --max-pieces 500 \
   --search-depth 3 --beam-width 8 --workers 0
 ```
 
-O aleatorio e o heuristico sao incluidos sempre. Informar `--genetic-model`
-adiciona o terceiro agente. Checkpoints de Q-table e Double-DQN continuam
-opcionais por meio de `--q-table-checkpoint` e `--rl-checkpoint`.
+O argumento `--agents` define a comparacao. O comando sem ele preserva os
+baselines aleatorio e heuristico. Cada agente selecionado que depende de modelo
+exige seu artefato correspondente: `--genetic-model`, `--q-table-checkpoint` ou
+`--rl-checkpoint`.
 
 Treinar os agentes que possuem CLI de treinamento:
 
 ```bash
 python -m tetris_ai.cli.train_genetic_agent --generations 10 --max-pieces 200 --validation-max-pieces 500 --seed 0 --workers 0
+python -m tetris_ai.cli.train_q_table_agent --episodes 5000 --max-pieces 500 --seed 0
 python -m tetris_ai.cli.train_rl --steps 200000 --max-pieces 500 --seed 0
 ```
+
+O checkpoint canonico do Q-table e salvo como
+`reports/q_table_agent/<run_id>/checkpoint.pkl`. O valor de `--max-pieces` no
+treino e na avaliacao deve ser o mesmo, pois o estado discretizado inclui o
+orcamento restante de pecas.
 
 ## Paralelismo
 

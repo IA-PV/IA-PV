@@ -206,6 +206,33 @@ def test_q_table_agent_rejects_legacy_and_wrong_horizon_checkpoints(tmp_path: Pa
     assert transferred.configuration()["max_pieces"] == 200
 
 
+def test_q_table_agent_loads_version_two_checkpoint_with_default_hyperparameters(
+    tmp_path: Path,
+) -> None:
+    checkpoint = tmp_path / "version_two.pkl"
+    with checkpoint.open("wb") as stream:
+        pickle.dump(
+            {
+                "checkpoint_version": 2,
+                "algorithm": "tabular-q-learning",
+                "board_width": 10,
+                "max_pieces": 500,
+                "epsilon": 0.25,
+                "transitions_observed": 7,
+                "episodes_completed": 2,
+                "q_table": {},
+            },
+            stream,
+        )
+
+    agent = QTableAgent()
+    agent.load(checkpoint)
+
+    assert agent.epsilon == 0.25
+    assert agent.transitions_observed == 7
+    assert agent.episodes_completed == 2
+
+
 def test_q_table_agent_requires_featured_observations() -> None:
     env = TetrisEnv(config=TetrisConfig(observation_mode="raw"), seed=1)
     agent = QTableAgent()

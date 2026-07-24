@@ -200,10 +200,14 @@ class TetrisEnv:
 
     def _placements_for_piece(self, piece: PieceType, use_hold: bool) -> dict[Action, _Placement]:
         placements: dict[Action, _Placement] = {}
+        board = self._board
+        # Precompute each column's fill map once, then land every candidate
+        # placement in O(cells) instead of scanning the column per placement.
+        next_filled_below = board.next_filled_below()
         for rotation, shape in enumerate(rotations_for(piece)):
             shape_width = len(shape[0])
-            for column in range(self.width - shape_width + 1):
-                row = self._board.drop_row(shape, column)
+            for column in range(board.width - shape_width + 1):
+                row = board.hard_drop_row(shape, column, next_filled_below)
                 if row is not None:
                     action = Action(rotation=rotation, column=column, use_hold=use_hold)
                     placements[action] = _Placement(piece=piece, shape=shape, row=row)
