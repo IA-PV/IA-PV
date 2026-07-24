@@ -307,3 +307,79 @@ def test_config_validation_and_fingerprint_are_stable() -> None:
         TetrisConfig(preview_count=0)
     with pytest.raises(ValueError):
         TetrisConfig(horizon_mode="invalid")  # type: ignore[arg-type]
+
+
+def _naive_is_valid(board, shape, column, row) -> bool:
+    """Reference collision check scanning the full shape bounding box."""
+
+    for shape_row, cells in enumerate(shape):
+        for shape_column, occupied in enumerate(cells):
+            if not occupied:
+                continue
+            x, y = column + shape_column, row + shape_row
+            if x < 0 or x >= board.width or y < 0 or y >= board.height:
+                return False
+            if board._grid[y][x]:
+                return False
+    return True
+
+
+def _naive_drop_row(board, shape, column):
+    if not _naive_is_valid(board, shape, column, 0):
+        return None
+    row = 0
+    while _naive_is_valid(board, shape, column, row + 1):
+        row += 1
+    return row
+
+
+def test_fast_placement_checks_match_naive_scan_on_arbitrary_boards() -> None:
+    """The filled-cell fast path must be bit-for-bit identical to a full scan.
+
+    Random boards include overhangs and floating cells, so this covers the
+    notch-over-bump hard drops a surface-height shortcut would get wrong.
+    """
+
+    import random
+
+    from tetris_ai.core.board import Board
+    from tetris_ai.core.tetromino import rotations_for
+
+    rng = random.Random(20260723)
+    env = TetrisEnv(seed=0)
+    for _ in range(120):
+        board = Board(width=10, height=20)
+        density = rng.choice((0.1, 0.25, 0.5, 0.75))
+        board._grid = [
+            [1 if rng.random() < density else 0 for _ in range(board.width)]
+            for _ in range(board.height)
+        ]
+        env._board = board
+        env._invalidate_legal_actions()
+        for piece in PieceType:
+            # 1. The optimized primitives match a naive full-bounding-box scan.
+            for rotation, shape in enumerate(rotations_for(piece)):
+                shape_width = len(shape[0])
+                for column in range(board.width - shape_width + 1):
+                    assert board.drop_row(shape, column) == _naive_drop_row(
+                        board, shape, column
+                    )
+                    for row in range(-1, board.height + 1):
+                        assert board.is_valid_position(
+                            shape, column, row
+                        ) == _naive_is_valid(board, shape, column, row)
+            # 2. The O(cells) placement enumeration matches the row-by-row drop.
+            fast = {
+                (action.rotation, action.column): placement.row
+                for action, placement in env._placements_for_piece(
+                    piece, use_hold=False
+                ).items()
+            }
+            reference: dict[tuple[int, int], int] = {}
+            for rotation, shape in enumerate(rotations_for(piece)):
+                shape_width = len(shape[0])
+                for column in range(board.width - shape_width + 1):
+                    row = _naive_drop_row(board, shape, column)
+                    if row is not None:
+                        reference[(rotation, column)] = row
+            assert fast == reference

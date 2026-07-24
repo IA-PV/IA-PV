@@ -199,6 +199,7 @@ def test_genetic_training_report_contains_canonical_model_history_and_chart(
         population_size=2,
         generations=1,
         episodes_per_individual=1,
+        monitoring_episodes=1,
         validation_episodes=1,
         max_pieces=1,
         validation_max_pieces=1,
@@ -236,6 +237,8 @@ def test_genetic_training_report_contains_canonical_model_history_and_chart(
     assert summary["fitness_definition"] == "mean_task_return"
     assert summary["best_task_return"] == result.best.fitness
     assert summary["validation_episode_count"] == 1
+    assert summary["monitoring_seeds"] == [6]
+    assert summary["monitoring_role"] == "diagnostic_only_not_used_for_selection"
     assert summary["best_fitness_confidence_interval_95"] is None
     assert metadata["configuration"]["population_size"] == 2
     assert metadata["fitness_metric"] == "task_return"

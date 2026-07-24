@@ -19,14 +19,14 @@ aleatorio e de busca heuristica.
 - **Aptidão (fitness):** média do `task_return` em episódios completos. Score,
   sobrevivência e métricas do tabuleiro são reportados, mas não misturados ao fitness.
 
-O algoritmo genético não usa o preset PBRS dos agentes de RL. Seus dez genes já
+O algoritmo genético não usa o preset PBRS dos agentes de RL. Seus treze genes já
 fornecem uma função densa para escolher ações; repetir essas heurísticas na aptidão
 introduziria um segundo objetivo e favoreceria artificialmente sua própria família de
 políticas.
 
 ## Cromossomo e politica
 
-O cromossomo e um vetor de dez pesos reais. Para cada acao legal, o agente usa o
+O cromossomo e um vetor de treze pesos reais. Para cada acao legal, o agente usa o
 forward model publico para simular a colocacao, normaliza os atributos e calcula:
 
 ```text
@@ -40,16 +40,32 @@ valor(acao) = soma(peso_i * atributo_i)
 | `holes` | buracos / area | peso negativo evita espacos inacessiveis |
 | `bumpiness` | desnivel / maximo teorico | peso negativo favorece superficie regular |
 | `max_height` | maior altura / altura do tabuleiro | peso negativo reduz risco |
-| `game_over` | 0 ou 1 | peso negativo evita derrota imediata |
+| `row_transitions` | flips cheio/vazio por linha (paredes cheias) / maximo | peso negativo favorece linhas solidas |
+| `column_transitions` | flips cheio/vazio por coluna (piso cheio) / maximo | peso negativo evita colunas esburacadas |
+| `wells` | profundidade agregada de pocos / area | peso negativo desencoraja pocos profundos |
+| `landing_height` | altura de pouso da peca / altura | peso negativo prefere pousos baixos |
 | `use_hold` | 0 ou 1 | custo ou beneficio geral de usar hold |
 | `hold_store_i` | 0 ou 1 | distingue guardar uma peca I |
 | `hold_retrieve_i` | 0 ou 1 | distingue retirar uma peca I do hold |
 | `i_well_match` | reducao normalizada de poco | recompensa usar I para reduzir um poco real |
 
-Os tres ultimos genes tornam o hold contextual. O agente pode aprender pesos distintos
-para guardar e recuperar a peca I, enquanto `i_well_match` informa se a colocacao da I
-realmente reduziu um poco. Isso e mais expressivo que um unico bonus plano de hold, mas
-continua sendo uma aproximacao linear interpretavel.
+Os quatro atributos de superficie (`row_transitions`, `column_transitions`, `wells`,
+`landing_height`) formam o nucleo da familia Dellacherie, mais informativo sobre a
+qualidade do tabuleiro do que apenas altura e desnivel. Os tres ultimos genes tornam o
+hold contextual: o agente pode aprender pesos distintos para guardar e recuperar a peca
+I, enquanto `i_well_match` informa se a colocacao da I realmente reduziu um poco. Isso e
+mais expressivo que um unico bonus plano de hold, mas continua sendo uma aproximacao
+linear interpretavel.
+
+### Fim de jogo como restricao dura
+
+O top-out (derrota real por falta de colocacao legal) **nao** e um gene aprendido. A
+busca subtrai uma penalidade dominante de qualquer colocacao que encerre a partida antes
+do horizonte, de modo que um top-out so e escolhido quando nenhuma jogada sobrevivente
+existe. Isso reflete o `game_over_penalty` do agente heuristico e evita o modo de falha
+em que, sob horizontes curtos, o antigo gene `game_over` ficava sem pressao seletiva e
+podia ate assumir sinal positivo. A conclusao do horizonte finito do planning-v2 e
+terminal para o MDP, mas nao conta como top-out.
 
 ## Lookahead limitado
 
@@ -61,7 +77,7 @@ o proximo nivel:
 valor(plano) = valor(a1) + desconto * valor(a2) + ...
 ```
 
-Os padroes sao profundidade 2, feixe 4 e desconto 0,95. Isso permite aceitar uma
+Os padroes sao profundidade 2, feixe 2 e desconto 0,95. Isso permite aceitar uma
 colocacao localmente pior quando a proxima peca compensa a decisao. A busca usa somente
 a fila publica; ao esgotar o preview, termina em `preview_horizon` sem consultar o RNG
 privado. Profundidade e largura maiores aumentam rapidamente o custo do treinamento.
@@ -73,44 +89,70 @@ comparacao justa por *common random numbers*. O lote muda deterministicamente na
 geracao seguinte e nao se sobrepoe aos anteriores. Assim, a populacao enfrenta varias
 sequencias de pecas em vez de otimizar sempre as mesmas partidas.
 
-Os elites de cada geracao sao guardados. Ao final, os candidatos unicos sao avaliados
-uma unica vez em sementes de validacao separadas; o melhor resultado de validacao vira
-o modelo salvo. As sementes de teste usadas para o relatorio ainda devem ser diferentes
-das sementes de treino e validacao.
+O protocolo reserva tres familias disjuntas:
+
+1. **Treino rotativo:** compara todos os individuos dentro de cada geracao e dirige a
+   evolucao.
+2. **Monitoramento fixo:** reavalia somente o vencedor do lote rotativo em exatamente
+   as mesmas seeds a cada geracao. Serve para log, CSV e grafico; nunca participa de
+   ranking, arquivo de elites ou selecao final.
+3. **Validacao final:** e usada somente depois do fim da evolucao para reranquear os
+   candidatos historicos e escolher o modelo salvo.
+
+As sementes de teste usadas para o relatorio ainda devem ser diferentes dessas tres
+familias.
 
 Como cada geracao enfrenta partidas diferentes, o melhor fitness de treino pode subir
 ou descer entre geracoes. Isso nao representa regressao automaticamente: os valores nao
-foram medidos na mesma amostra. A comparacao final correta e o fitness de validacao e,
-depois, o desempenho nas sementes externas de teste.
+foram medidos na mesma amostra. A serie `monitoring_fitness` e a curva comparavel para
+diagnostico. A comparacao final correta continua sendo o fitness de validacao e, depois,
+o desempenho nas sementes externas de teste. Como qualquer conjunto consultado
+repetidamente, o monitoramento pode influenciar decisoes humanas sobre hiperparametros;
+por isso ele nao substitui a validacao nem o teste final.
 
 ## Algoritmo genetico
 
 1. Inicializa pesos aleatorios uniformes entre -1 e 1 e normaliza cada vetor para norma
    Euclidiana 1, removendo a escala redundante da politica linear.
 2. Avalia a populacao no lote de sementes exclusivo da geracao.
-3. Copia os melhores individuos por elitismo.
-4. Seleciona pais por torneio.
+3. Atualiza a reputacao dos elites persistentes por media movel exponencial de seu
+   percentil na populacao e admite os melhores desafiantes no arquivo limitado.
+4. Copia o arquivo robusto para a geracao seguinte e seleciona os demais pais por
+   torneio.
 5. Aplica crossover aritmetico com `filho = alfa * pai1 + (1-alfa) * pai2`.
-6. Aplica mutacao gaussiana independente por gene e normaliza o descendente.
-7. Seleciona o modelo final nas sementes separadas de validacao.
+6. Aplica mutacao gaussiana independente por gene, reduz seu desvio padrao ao longo
+   das reproducoes e normaliza o descendente.
+7. Mede o vencedor geracional nas seeds fixas de monitoramento.
+8. Seleciona o modelo final nas sementes separadas de validacao.
+
+A memoria usa percentil, e nao fitness bruto, porque os lotes rotativos podem ter
+dificuldades diferentes. `elite_memory_alpha=0,25` atribui 75% a reputacao anterior e
+25% ao ranking relativo atual. Os dois melhores incumbentes ocupam o nucleo protegido;
+um desafiante entra primeiro nas demais vagas e, depois de outra observacao, pode
+substitui-los. O arquivo preserva no maximo quatro individuos por padrao e sempre deixa
+ao menos uma vaga para descendentes, inclusive em populacoes pequenas. Isso reduz a
+chance de um campeao desaparecer por um unico lote adverso sem tornar o arquivo imortal:
+desempenho relativo ruim repetido reduz sua reputacao.
 
 O crossover aritmetico produz interpolacoes suaves entre pesos reais e tende a preservar
 relacoes entre genes. Ele nao e universalmente superior ao uniforme: pode reduzir
 diversidade quando os pais sao parecidos. A mutacao gaussiana continua sendo a principal
-fonte de exploracao local.
+fonte de exploracao local. Por padrao, seu desvio cai exponencialmente de 0,25 para
+0,05 entre a primeira e a ultima reproducao. Com apenas duas geracoes existe uma unica
+reproducao, portanto somente o valor inicial pode ser aplicado.
 
 ## Execucao
 
 Treino rapido para validar a instalacao:
 
 ```bash
-python -m tetris_ai.cli.train_genetic_agent --population-size 6 --generations 2 --episodes-per-individual 1 --validation-episodes 2 --max-pieces 30 --lookahead-depth 1 --workers 0
+python -m tetris_ai.cli.train_genetic_agent --population-size 6 --generations 2 --episodes-per-individual 1 --monitoring-episodes 1 --validation-episodes 2 --max-pieces 30 --lookahead-depth 1 --workers 0
 ```
 
 Treino padrao com lookahead:
 
 ```bash
-python -m tetris_ai.cli.train_genetic_agent --population-size 16 --generations 10 --episodes-per-individual 4 --validation-episodes 12 --max-pieces 200 --lookahead-depth 2 --lookahead-beam-width 2 --lookahead-discount 0.95 --seed 0 --workers 0
+python -m tetris_ai.cli.train_genetic_agent --population-size 16 --generations 10 --episodes-per-individual 8 --monitoring-episodes 8 --validation-episodes 12 --max-pieces 200 --mutation-stddev 0.25 --final-mutation-stddev 0.05 --mutation-schedule exponential --lookahead-depth 2 --lookahead-beam-width 2 --lookahead-discount 0.95 --seed 0 --workers 0
 ```
 
 No treino, cada processo avalia um cromossomo completo no mesmo lote de
@@ -150,7 +192,9 @@ python -m tetris_ai.cli.watch_agent --agent genetic --genetic-model reports/gene
 
 ## Hiperparametros principais
 
-- `episodes_per_individual`: tamanho do lote de treino de cada geracao.
+- `episodes_per_individual`: tamanho do lote de treino de cada geracao (padrao 8).
+- `monitoring_episodes`: tamanho do lote fixo usado somente para diagnostico
+  (padrao 8).
 - `max_pieces`: horizonte prático usado durante a evolução (padrão 200).
 - `validation_max_pieces`: horizonte canônico usado para reranking dos finalistas
   (padrão 500).
@@ -159,15 +203,23 @@ python -m tetris_ai.cli.watch_agent --agent genetic --genetic-model reports/gene
 - `lookahead_beam_width`: planos parciais continuados em cada nivel.
 - `lookahead_discount`: importancia relativa das colocacoes futuras.
 - `population_size` e `generations`: capacidade e duracao da evolucao.
-- `mutation_rate` e `mutation_stddev`: frequencia e intensidade da exploracao.
-- `elite_count` e `tournament_size`: preservacao e pressao seletiva.
+- `mutation_rate`, `mutation_stddev`, `final_mutation_stddev` e
+  `mutation_schedule`: frequencia, intensidade inicial/final e curva de annealing.
+- `elite_count`: quantidade de vencedores geracionais enviados a validacao final.
+- `elite_archive_capacity` e `elite_memory_alpha`: capacidade da memoria persistente
+  e peso do ranking relativo atual.
+- `tournament_size`: pressao seletiva na geracao corrente.
+- `frozen_genes` (`--freeze-genes`): genes mantidos em zero durante toda a evolucao,
+  para estudos de ablacao. Vazio (padrao) mantem todos os genes livres e e
+  identico a evolucao normal. Exemplo: `--freeze-genes use_hold hold_store_i
+  hold_retrieve_i i_well_match`.
 - `workers`: paralelismo de execucao; nao altera politica, sementes ou fitness.
 
 ## Protocolo recomendado para o relatorio e o video
 
 - Preserve a pasta completa do relatorio. O JSON registra configuracao, lotes de
-  treino, sementes de validacao, politica de busca, cromossomo e metricas; CSV,
-  SVG e PNG permitem auditoria tabular e visual.
+  treino, sementes de monitoramento e validacao, politica de busca, cromossomo,
+  annealing e metricas; CSV, SVG e PNG permitem auditoria tabular e visual.
 - Reserve sementes externas para o teste final; nao escolha hiperparametros pelos
   resultados de teste.
 - Compare genetico, busca heuristica e aleatorio nas mesmas sementes.
@@ -178,10 +230,15 @@ python -m tetris_ai.cli.watch_agent --agent genetic --genetic-model reports/gene
 
 ## Compatibilidade e limitacoes
 
-Artefatos antigos de sete genes continuam carregando: os três novos genes recebem peso
-zero e a profundidade permanece 1, reproduzindo a política anterior. Isso é
-compatibilidade mecânica, não compatibilidade experimental: um cromossomo selecionado
-por fitness antigo deve ser tratado como baseline e retreinado sob `planning-v2`.
+Novos modelos usam `schema_version: 5`, que adiciona os atributos de superficie
+Dellacherie e remove `game_over` do cromossomo (agora restricao de busca). O loader
+continua aceitando os schemas 1 a 4.
+
+Artefatos antigos continuam carregando: genes que a politica atual nao expoe mais (como
+`game_over`) sao descartados, e genes introduzidos por um schema mais novo recebem peso
+zero, reproduzindo a politica anterior. Isso e compatibilidade mecanica, nao
+compatibilidade experimental: um cromossomo selecionado por fitness antigo deve ser
+tratado como baseline e retreinado sob `planning-v2` com o conjunto de genes atual.
 
 A politica ainda e linear, e beam search nao garante o plano globalmente otimo. Os
 genes contextuais de hold focam a estrategia comum da peca I, mas nao representam todas

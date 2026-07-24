@@ -84,13 +84,15 @@ def test_evaluation_can_select_exactly_heuristic_genetic_and_q_table() -> None:
 
 def test_genetic_training_is_identical_serial_and_parallel() -> None:
     config = GeneticAlgorithmConfig(
-        population_size=2,
-        generations=1,
+        population_size=4,
+        generations=2,
         episodes_per_individual=1,
+        monitoring_episodes=1,
         validation_episodes=1,
         max_pieces=1,
         validation_max_pieces=1,
         elite_count=1,
+        elite_archive_capacity=2,
         tournament_size=2,
         lookahead_depth=1,
         lookahead_beam_width=1,
