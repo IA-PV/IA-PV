@@ -1,19 +1,52 @@
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 
-from ..agents import RandomAgent, StateGoalHeuristicAgent
-from ..env import TetrisEnv
+from ..agents import (
+    DQNAgent,
+    GeneticAgent,
+    QTableAgent,
+    StateGoalHeuristicAgent,
+    load_genetic_model,
+)
+from ..env import CANONICAL_MAX_PIECES, TetrisConfig, TetrisEnv, rl_training_reward_config
 from ..visualization import TetrisTkViewer
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Open a graphical viewer and watch a Tetris agent play.")
-    parser.add_argument("--agent", choices=("state-goal", "random"), default="state-goal")
+    parser.add_argument(
+        "--agent",
+        choices=("state-goal", "genetic", "q-table", "dqn"),
+        default="state-goal",
+    )
     parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--max-pieces", type=int, default=500)
+    parser.add_argument("--max-pieces", type=int, default=CANONICAL_MAX_PIECES)
     parser.add_argument("--search-depth", type=int, default=3)
-    parser.add_argument("--beam-width", type=int, default=8)
+    parser.add_argument("--search-strategy", choices=("greedy", "astar"), default="greedy")
+    parser.add_argument(
+        "--max-nodes-expanded",
+        type=int,
+        default=2_000,
+        help="Per-plan expansion budget; use 0 for an exhaustive search.",
+    )
+    parser.add_argument(
+        "--beam-width",
+        type=int,
+        default=None,
+        help="Deprecated compatibility option for older heuristic-agent commands.",
+    )
+    parser.add_argument(
+        "--genetic-model",
+        type=Path,
+        help="JSON model produced by train_genetic_agent (required for --agent genetic).",
+    )
+    parser.add_argument(
+        "--genetic-generation",
+        type=int,
+        help="Watch the best chromosome from this recorded generation instead of the final best.",
+    )
     parser.add_argument("--delay-ms", type=int, default=80, help="Base delay per rendered row at level 1.")
     parser.add_argument("--min-delay-ms", type=int, default=18, help="Minimum delay per rendered row.")
     parser.add_argument(
@@ -22,22 +55,96 @@ def main() -> None:
         default=0.85,
         help="Multiplier applied to the animation delay for each level.",
     )
+    parser.add_argument(
+        "--q-table-train-episodes",
+        type=int,
+        default=0,
+        help="Episodes to train a tabular Q-Learning agent before opening the viewer.",
+    )
+    parser.add_argument(
+        "--q-table-checkpoint",
+        type=Path,
+        default=None,
+        help="Optional tabular Q-Learning checkpoint to load and/or save.",
+    )
+    parser.add_argument(
+        "--dqn-checkpoint",
+        type=Path,
+        default=None,
+        help="DQN checkpoint produced by train_dqn (required for --agent dqn).",
+    )
     args = parser.parse_args()
 
-    if args.max_pieces <= 0 or args.search_depth <= 0 or args.beam_width <= 0:
-        parser.error("--max-pieces, --search-depth, and --beam-width must be positive.")
+    if args.max_pieces <= 0 or args.search_depth <= 0:
+        parser.error("--max-pieces and --search-depth must be positive.")
+    if args.max_nodes_expanded < 0:
+        parser.error("--max-nodes-expanded must be non-negative.")
+    if args.beam_width is not None and args.beam_width <= 0:
+        parser.error("--beam-width must be positive.")
+    if args.q_table_train_episodes < 0:
+        parser.error("--q-table-train-episodes cannot be negative.")
     if args.delay_ms <= 0 or args.min_delay_ms <= 0:
         parser.error("--delay-ms and --min-delay-ms must be positive.")
     if args.min_delay_ms > args.delay_ms:
         parser.error("--min-delay-ms must not exceed --delay-ms.")
     if not 0.0 < args.level_speed_factor <= 1.0:
         parser.error("--level-speed-factor must be greater than 0 and at most 1.")
+    if args.genetic_generation is not None and args.agent != "genetic":
+        parser.error("--genetic-generation is only valid with --agent genetic.")
 
     env = TetrisEnv(max_pieces=args.max_pieces, seed=args.seed)
-    if args.agent == "random":
-        agent = RandomAgent(seed=args.seed)
+    if args.agent == "state-goal":
+        agent = StateGoalHeuristicAgent(
+            search_depth=args.search_depth,
+            search_strategy=args.search_strategy,
+            max_nodes_expanded=args.max_nodes_expanded or None,
+            beam_width=args.beam_width,
+        )
+    elif args.agent == "genetic":
+        if args.genetic_model is None:
+            parser.error("--genetic-model is required when --agent genetic is selected.")
+        try:
+            genetic_model = load_genetic_model(
+                args.genetic_model,
+                generation=args.genetic_generation,
+            )
+            _print_genetic_compatibility_warning(genetic_model)
+            agent = GeneticAgent(
+                genetic_model.chromosome,
+                genetic_model.policy_config,
+            )
+        except ValueError as error:
+            parser.error(str(error))
+    elif args.agent == "dqn":
+        if args.dqn_checkpoint is None or not args.dqn_checkpoint.exists():
+            parser.error(
+                "--dqn-checkpoint must point to an existing checkpoint "
+                "(train it with tetris_ai.cli.train_dqn)."
+            )
+        try:
+            agent = DQNAgent.from_checkpoint(
+                args.dqn_checkpoint,
+                max_pieces=args.max_pieces,
+                seed=args.seed,
+                allow_horizon_transfer=True,
+            )
+        except ValueError as error:
+            parser.error(f"Cannot load DQN checkpoint: {error}")
     else:
-        agent = StateGoalHeuristicAgent(search_depth=args.search_depth, beam_width=args.beam_width)
+        agent = QTableAgent(max_pieces=args.max_pieces, seed=args.seed)
+        if args.q_table_checkpoint is not None and args.q_table_checkpoint.exists():
+            try:
+                agent.load(args.q_table_checkpoint)
+            except ValueError as error:
+                parser.error(f"Cannot load Q-table checkpoint: {error} Retrain it with --q-table-train-episodes.")
+        elif args.q_table_checkpoint is not None and args.q_table_train_episodes == 0:
+            parser.error("Checkpoint not found. Supply --q-table-train-episodes to create it.")
+
+        if args.q_table_train_episodes:
+            _train_q_table(agent, args.q_table_train_episodes, args.max_pieces, args.seed)
+            if args.q_table_checkpoint is not None:
+                agent.save(args.q_table_checkpoint)
+        agent.eval()
 
     TetrisTkViewer(
         env,
@@ -46,6 +153,46 @@ def main() -> None:
         min_delay_ms=args.min_delay_ms,
         level_speed_factor=args.level_speed_factor,
     ).run()
+
+
+def _train_q_table(agent: QTableAgent, episodes: int, max_pieces: int, seed: int) -> None:
+    """Train tabular Q-Learning on real transitions, then leave playback to the viewer."""
+    agent.train()
+    training_config = TetrisConfig(
+        max_pieces=max_pieces,
+        reward=rl_training_reward_config(),
+    )
+    for episode in range(episodes):
+        training_env = TetrisEnv(config=training_config, seed=seed + episode)
+        observation = training_env.get_observation()
+        episode_return = 0.0
+        task_return = 0.0
+        while not training_env.done:
+            action = agent.select_action(training_env.decision_context())
+            next_observation, reward, terminated, truncated, info = training_env.step(action)
+            agent.observe(observation, action, next_observation, reward, terminated, truncated)
+            observation = next_observation
+            episode_return += reward
+            task_return += float(info["reward"]["task_reward"])
+        agent.end_episode()
+        if (episode + 1) % 100 == 0 or episode + 1 == episodes:
+            print(
+                f"Q-table ep={episode + 1} score={training_env.score} "
+                f"lines={training_env.total_lines_cleared} task-return={task_return:.2f} "
+                f"train-return={episode_return:.2f} "
+                f"entries={len(agent.q_table)} epsilon={agent.epsilon:.3f}"
+            )
+
+
+def _print_genetic_compatibility_warning(model: object) -> None:
+    compatibility_issues = getattr(model, "compatibility_issues", None)
+    issues = compatibility_issues() if callable(compatibility_issues) else ()
+    if issues:
+        print(
+            "WARNING: genetic model is being used as a legacy baseline; "
+            + "; ".join(issues)
+            + ". Retrain it before claiming planning-v2 results."
+        )
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 # Tetris AI
 
-Base headless e por turnos para experimentar agentes de IA em Tetris. O nucleo nao importa OpenGL, teclado ou qualquer outro componente grafico. O ambiente usa um ruleset de planejamento versionado, configuracao imutavel, 7-bag deterministico e um contrato de decisao que nao expoe o RNG privado aos agentes.
+Base headless e por turnos para experimentar agentes de IA em Tetris. O núcleo não importa OpenGL, teclado ou qualquer outro componente gráfico. O ambiente `planning-v2` usa configuração imutável, 7-bag determinístico e um contrato de decisão que não expõe o RNG privado aos agentes. A recompensa oficial é a utilidade fixa de linhas `(0, 1, 3, 5, 8)`; score, level e Back-to-Back são telemetria comparável, não um objetivo oculto.
 
 ## Instalacao
 
@@ -18,13 +18,140 @@ Execute os testes:
 pytest
 ```
 
-Compare o agente aleatorio com o agente baseado em estado, objetivo e busca heuristica:
+Avalie o agente baseado em estado, objetivo e busca heuristica:
 
 ```bash
-python -m tetris_ai.cli.evaluate_agents --episodes 5 --max-pieces 100 --search-depth 3 --beam-width 8
+python -m tetris_ai.cli.evaluate_agents --episodes 50 --max-pieces 500 --search-depth 3 --search-strategy greedy --max-nodes-expanded 2000 --workers 0
 ```
 
-O CSV e salvo em `results/evaluation.csv` com score, linhas removidas, recompensa, motivo de termino, profundidade efetiva, largura do feixe e nos expandidos.
+`--workers 0` distribui partidas independentes entre todos os processadores
+logicos, preservando um para o sistema operacional. Use `--workers 1` para a
+execucao serial ou um numero explicito, como `--workers 4`, para limitar o uso
+de CPU e memoria.
+
+Use `--search-strategy greedy` para priorizar `h(n)`, ou `--search-strategy
+astar` para priorizar `g(n) + h(n)`. Por padrao, cada planejamento possui um
+orcamento de 2.000 nos; `--max-nodes-expanded 0` remove esse limite.
+
+Cada execucao gera pastas imutaveis em `reports/<agente>/<run_id>/`, contendo o
+CSV por episodio, resumo estatistico, configuracoes, metadados de
+reprodutibilidade e graficos Matplotlib em SVG e PNG 300 DPI. A comparacao
+mostra observacoes individuais, media, intervalo de confianca de 95% e uma
+analise pareada por semente. Comparacoes tambem geram
+`reports/comparisons/<run_id>/`. O formato completo esta em
+[docs/EXPERIMENT_REPORTS.md](docs/EXPERIMENT_REPORTS.md).
+
+## Agente de busca heuristica
+
+`HeuristicSearchAgent` formula um `TetrisSearchProblem` a cada vez que o
+plano interno acaba. Um estado de busca contem a matriz do tabuleiro, a peca
+corrente, a fila publica de proximas pecas (o unico estado do gerador que o
+agente pode conhecer), o hold e a posicao final da ultima peca travada. Cada
+acao e uma colocacao final `(rotacao, coluna)`, logo seu custo de caminho e
+`g(n) = 1` por peca colocada.
+
+O objetivo e travar a peca atual — e, quando ha lookahead, as pecas visiveis
+planejadas — no menor custo de tabuleiro. A heuristica minimizada e:
+
+```text
+h(n) = 35.6 * buracos + 0.51 * altura_agregada
+```
+
+## Agente baseado em algoritmo genetico
+
+O terceiro agente evolui os pesos de uma politica linear sobre dez atributos
+normalizados e usa lookahead limitado por beam search. Cada geracao enfrenta um lote
+novo de sementes. Uma terceira familia fixa de sementes, separada do treino e da
+validacao final, produz uma curva de monitoramento comparavel entre geracoes sem
+participar da selecao. Selecao por torneio, crossover aritmetico, mutacao gaussiana
+com annealing e um arquivo de elites com memoria de ranking produzem as proximas
+geracoes. Ao final, os campeoes historicos ainda sao reranqueados nas sementes
+exclusivas de validacao.
+
+Treine e salve o cromossomo, os hiperparametros e a curva de evolucao:
+
+```bash
+python -m tetris_ai.cli.train_genetic_agent --population-size 16 --generations 10 --episodes-per-individual 8 --monitoring-episodes 8 --validation-episodes 12 --max-pieces 200 --mutation-stddev 0.25 --final-mutation-stddev 0.05 --lookahead-depth 2 --lookahead-beam-width 2 --seed 0 --workers 0
+```
+
+Compare os tres agentes em sementes separadas das usadas no treino:
+
+```bash
+python -m tetris_ai.cli.evaluate_agents --agents state-goal genetic q-table --episodes 50 --seed 1000000 --max-pieces 500 --search-depth 3 --beam-width 8 --genetic-model reports/genetic_agent/<run_id>/model.json --q-table-checkpoint reports/q_table_agent/<run_id>/checkpoint.pkl --workers 0
+```
+
+Depois de congelar políticas e hiperparâmetros, repita como teste de estresse em
+1.000 peças (sem novo ajuste):
+
+```bash
+python -m tetris_ai.cli.evaluate_agents --episodes 50 --seed 2000000 --max-pieces 1000 --genetic-model reports/genetic_agent/<run_id>/model.json --workers 0
+```
+
+Ao incluir um checkpoint Q-Learning treinado em 500 peças nesse estresse,
+adicione `--allow-horizon-transfer`. A opção é explícita para impedir que uma mudança
+de contrato seja confundida acidentalmente com o benchmark principal.
+
+Assista ao modelo treinado:
+
+```bash
+python -m tetris_ai.cli.watch_agent --agent genetic --genetic-model reports/genetic_agent/<run_id>/model.json --seed 1000000
+```
+
+A formulacao, os genes, os hiperparametros, o protocolo experimental e as limitacoes
+estao detalhados em [docs/GENETIC_AGENT.md](docs/GENETIC_AGENT.md).
+
+## Agente Q-Learning tabular
+
+`QTableAgent` aprende `Q[(estado, acao)]` com politica epsilon-gulosa. O estado
+discretiza o tabuleiro em cinco **Macro-Colunas** (cada uma guarda a maior altura
+de um par de colunas adjacentes, em cinco niveis), mais um balde de buracos e a
+peca atual. Isso mantem o espaco de estados tratavel (`5^5 * 4 * 7`), preservando a
+feature mais preditiva do Tetris (buracos) e a nocao espacial de onde o tabuleiro
+esta alto.
+
+Treine sem abrir o visualizador. O treino usa PBRS para dar sinal denso, mas
+reporta `task_return` separadamente; avaliacao e ranking sempre usam a recompensa
+canonica sem shaping. O relatorio inclui checkpoint, telemetria por episodio,
+resumo, graficos e hiperparametros:
+
+```bash
+python -m tetris_ai.cli.train_q_table --episodes 5000 --max-pieces 500 --seed 0
+```
+
+Monitore `avg_return`, `avg_lines`, `epsilon`, `states` (estados distintos) e
+`q_table_entries` (pares estado/acao). Inclua o checkpoint na comparacao com
+`--q-table-checkpoint reports/q_table_agent/<run_id>/checkpoint.pkl`. Como o schema
+de estado mudou, checkpoints antigos (versao 1 ou 2) sao recusados e devem ser
+retreinados.
+
+## Agente DQN (afterstate)
+
+`DQNAgent` substitui a tabela por uma rede de valor e explora o fato de que colocar
+uma peca leva a um tabuleiro **deterministico**: em vez de `Q(estado, acao)`, aprende
+`V(features_do_afterstate)`. Na decisao, simula cada colocacao legal e escolhe
+`argmax [ r(a) + gamma * V(afterstate(a)) ]`. A entrada sao cinco features do tabuleiro
+(altura agregada, buracos, bumpiness, linhas removidas, altura maxima) — a mesma
+normalizacao do agente genetico —, entao a rede e minuscula. Traz o maquinario padrao
+de DQN: replay buffer limitado, target network com sync periodico, bootstrap TD e
+epsilon decrescente. A rede e um MLP em NumPy puro (Adam + Huber), sem dependencia
+pesada.
+
+Treine sem abrir o visualizador (o relatorio inclui checkpoint, telemetria por
+episodio, resumo, graficos e hiperparametros):
+
+```bash
+python -m tetris_ai.cli.train_dqn --episodes 300 --max-pieces 500 --seed 0
+```
+
+O DQN e eficiente em amostras (poucas centenas de episodios) mas caro por decisao
+(cada jogada simula todas as colocacoes legais), entao os episodios ficam mais lentos
+conforme o agente sobrevive mais. Inclua o checkpoint na comparacao com
+`--dqn-checkpoint reports/dqn_agent/<run_id>/checkpoint.pkl` e assista ao modelo
+treinado:
+
+```bash
+python -m tetris_ai.cli.watch_agent --agent dqn --dqn-checkpoint reports/dqn_agent/<run_id>/checkpoint.pkl --seed 1000000
+```
 
 ## Contrato do ambiente
 
@@ -42,16 +169,24 @@ while not observation.done:
     observation, reward, terminated, truncated, info = env.step(action)
 ```
 
-`terminated=True` significa game over. `truncated=True` indica um limite externo, normalmente `max_pieces`; truncamento nao recebe a penalidade de derrota por padrao. `done` permanece como propriedade de conveniencia equivalente a `terminated or truncated`.
+No modo padrão `horizon_mode="finite"`, `terminated=True` pode significar
+`game_over` ou `horizon_completed`; os motivos explícitos em `info` eliminam a
+ambiguidade. No modo alternativo `time_limit`, `max_pieces` produz
+`truncated=True` e `piece_limit`, preservando a máscara do próximo estado para
+bootstrap. `done` permanece equivalente a `terminated or truncated`.
 
 O agente recebe `DecisionContext`, nao a instancia real de `TetrisEnv`. Simulacoes consomem somente `next_pieces`, a fila publica configuravel. Quando ela acaba, o forward model retorna truncamento por `preview_horizon` em vez de consultar o RNG secreto.
 
 Abra uma janela para assistir o agente jogando:
 
 ```bash
-python -m tetris_ai.cli.watch_agent --agent state-goal --seed 0 --max-pieces 500 --search-depth 3 --beam-width 8 --delay-ms 80 --min-delay-ms 18 --level-speed-factor 0.85
+python -m tetris_ai.cli.watch_agent --agent state-goal --seed 0 --max-pieces 500 --search-depth 3 --search-strategy greedy --delay-ms 80 --min-delay-ms 18 --level-speed-factor 0.85
 ```
 
-O visualizador usa o estilo da interface original, com tabuleiro a esquerda, painel lateral, `HOLD`, `NEXT` desenhado, score, level, linhas, ultima jogada e nos expandidos pela busca. A animacao acelera a cada level: `delay = max(min_delay, round(delay_base * fator^(level - 1)))`. Esse tempo pertence somente a apresentacao e nao altera as regras, os agentes, a recompensa ou os resultados do ambiente `planning-v1`.
+O visualizador usa o estilo da interface original, com tabuleiro à esquerda, painel lateral, `HOLD`, `NEXT`, score, level, linhas, última jogada e nós expandidos. A animação acelera a cada level: `delay = max(min_delay, round(delay_base * fator^(level - 1)))`. Esse tempo pertence somente à apresentação e não altera o contrato `planning-v2`.
 
-A especificacao formal do ambiente esta em [docs/ENVIRONMENT_SPEC.md](docs/ENVIRONMENT_SPEC.md). A arquitetura, a migracao e as limitacoes estao em [docs/ARCHITECTURE_AND_MIGRATION.md](docs/ARCHITECTURE_AND_MIGRATION.md).
+A decisão completa de objetivo, reward shaping, horizonte e protocolo está em
+[docs/EXPERIMENT_CONTRACT.md](docs/EXPERIMENT_CONTRACT.md). A especificação formal
+do ambiente está em [docs/ENVIRONMENT_SPEC.md](docs/ENVIRONMENT_SPEC.md), e a
+arquitetura/migração em
+[docs/ARCHITECTURE_AND_MIGRATION.md](docs/ARCHITECTURE_AND_MIGRATION.md).

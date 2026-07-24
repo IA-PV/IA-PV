@@ -211,6 +211,10 @@ tempCodeRunnerFile.py
 # Generated evaluation artifacts (keep the directory through results/.gitkeep)
 results/*.csv
 
+# Immutable local experiment reports (keep only the directory marker in Git)
+reports/*
+!reports/.gitkeep
+
 # Ruff stuff:
 .ruff_cache/
 

@@ -1,8 +1,10 @@
-# Especificacao do ambiente Tetris planning-v1
+# Especificação do ambiente Tetris `planning-v2`
 
 ## Objetivo
 
-`planning-v1` e um ambiente deterministico por seed para comparar agentes de planejamento e, futuramente, aprendizado por reforco e algoritmos geneticos. A unidade temporal e uma peca travada, nao um frame de jogo humano.
+`planning-v2` é um ambiente determinístico por seed para comparar agentes de
+planejamento, aprendizado por reforço e algoritmo genético sob o mesmo objetivo. A
+unidade temporal é uma peça travada, não um frame de jogo humano.
 
 ## Configuracao e reproducibilidade
 
@@ -16,7 +18,8 @@ Uma `Observation` e imutavel e contem:
 
 - matriz binaria do tabuleiro;
 - peca atual, fila publica `next_pieces` e hold;
-- score, level, linhas e pecas colocadas;
+- score, level, linhas e peças colocadas;
+- horizonte máximo e quantidade de peças restantes;
 - estado de Back-to-Back;
 - `terminated`, `truncated` e a propriedade derivada `done`;
 - mascara booleana do espaco fixo de acoes;
@@ -54,7 +57,7 @@ Com `use_hold=False`, a peca atual e colocada. Com `use_hold=True`, a troca de h
 
 Essas regras definem um problema de planejamento de colocacoes finais. Elas nao pretendem reproduzir todos os controles do Tetris Guideline.
 
-## Score e recompensa
+## Score, recompensa de tarefa e shaping
 
 Score e recompensa sao contratos separados.
 
@@ -62,7 +65,22 @@ O score usa a tabela `(0, 100, 300, 500, 800)` para zero a quatro linhas e o lev
 
 A aproximacao de T-Spin por tres cantos fica desativada por padrao porque o ruleset nao registra a ultima rotacao nem implementa SRS. Ela so pode ser habilitada explicitamente em `ScoringConfig`, e a telemetria identifica `three_corner_approximation`.
 
-A recompensa padrao combina linhas e deltas de buracos, altura agregada e bumpiness. `terminated` aplica penalidade de derrota. `truncated` possui penalidade independente, igual a zero por padrao. O shaping pode ser desligado para produzir observacoes e objetivos menos orientados por features manuais.
+A recompensa canônica é estacionária e depende apenas das linhas removidas:
+`(0, 1, 3, 5, 8)`. Penalidades terminal e de truncamento são zero. Esse valor é
+registrado como `task_reward`; seu acumulado, `task_return`, é a medida oficial para
+fitness e comparação.
+
+O preset de treino de Q-Learning e Double-DQN acrescenta potential-based reward
+shaping (PBRS):
+
+```text
+Phi(s) = -(0.50 * holes + 0.05 * aggregate_height + 0.10 * bumpiness)
+r_train = task_reward + gamma * Phi(s') - Phi(s), gamma = 1
+```
+
+O potencial sucessor é zero em término real do MDP, mas é mantido em truncamento
+externo. `task_reward`, `potential_shaping` e `total` aparecem separadamente em
+`info["reward"]`. O benchmark usa o preset canônico sem shaping.
 
 ## Encerramento
 
@@ -72,7 +90,16 @@ A recompensa padrao combina linhas e deltas de buracos, altura agregada e bumpin
 observation, reward, terminated, truncated, info
 ```
 
-`terminated` representa game over. `truncated` representa `piece_limit` no ambiente real ou `preview_horizon` no forward model. Os dois podem ser verdadeiros no mesmo passo e todos os motivos aparecem em `termination_reasons`.
+O padrão `horizon_mode="finite"` modela um MDP episódico de 500 peças. Ao alcançar o
+orçamento, `terminated=True` e o motivo é `horizon_completed`; o orçamento restante
+na observação preserva a propriedade de Markov. `game_over` também é um término e os
+dois motivos podem coexistir.
+
+Em `horizon_mode="time_limit"`, o mesmo corte é externo: `truncated=True`, motivo
+`piece_limit`, e a observação terminal preserva a máscara legal para bootstrap.
+`preview_horizon` é sempre um truncamento do forward model público. Todos os motivos
+aparecem em `termination_reasons`; código consumidor não deve inferir derrota apenas
+do booleano `terminated`.
 
 ## Telemetria
 
@@ -88,7 +115,9 @@ O hash permite comparar trajetorias geradas pela mesma configuracao, seed e sequ
 - mascara e IDs correspondem exatamente as acoes legais;
 - acao invalida nao altera o estado;
 - hold e colocacao formam uma unica transicao;
-- truncamento nao recebe penalidade de game over;
-- game over e limite podem coexistir;
+- horizonte finito não recebe penalidade de game over;
+- modo de time limit preserva a máscara de bootstrap;
+- game over e horizonte podem coexistir;
+- PBRS telescopa para o mesmo objetivo no MDP finito;
 - T-Spin aproximado exige habilitacao explicita;
 - configuracoes invalidas sao rejeitadas.
