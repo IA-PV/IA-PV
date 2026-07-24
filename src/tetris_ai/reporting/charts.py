@@ -380,6 +380,7 @@ def _agent_label(agent_name: str) -> str:
         "StateGoalHeuristicAgent": "Heurístico",
         "GeneticAgent": "Genético",
         "QTableAgent": "Q-Learning",
+        "DQNAgent": "DQN",
     }.get(agent_name, agent_name.removesuffix("Agent"))
 
 
