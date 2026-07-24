@@ -121,6 +121,35 @@ Monitore `avg_return`, `avg_lines`, `epsilon`, `states` (estados distintos) e
 de estado mudou, checkpoints antigos (versao 1 ou 2) sao recusados e devem ser
 retreinados.
 
+## Agente DQN (afterstate)
+
+`DQNAgent` substitui a tabela por uma rede de valor e explora o fato de que colocar
+uma peca leva a um tabuleiro **deterministico**: em vez de `Q(estado, acao)`, aprende
+`V(features_do_afterstate)`. Na decisao, simula cada colocacao legal e escolhe
+`argmax [ r(a) + gamma * V(afterstate(a)) ]`. A entrada sao cinco features do tabuleiro
+(altura agregada, buracos, bumpiness, linhas removidas, altura maxima) — a mesma
+normalizacao do agente genetico —, entao a rede e minuscula. Traz o maquinario padrao
+de DQN: replay buffer limitado, target network com sync periodico, bootstrap TD e
+epsilon decrescente. A rede e um MLP em NumPy puro (Adam + Huber), sem dependencia
+pesada.
+
+Treine sem abrir o visualizador (o relatorio inclui checkpoint, telemetria por
+episodio, resumo, graficos e hiperparametros):
+
+```bash
+python -m tetris_ai.cli.train_dqn --episodes 300 --max-pieces 500 --seed 0
+```
+
+O DQN e eficiente em amostras (poucas centenas de episodios) mas caro por decisao
+(cada jogada simula todas as colocacoes legais), entao os episodios ficam mais lentos
+conforme o agente sobrevive mais. Inclua o checkpoint na comparacao com
+`--dqn-checkpoint reports/dqn_agent/<run_id>/checkpoint.pkl` e assista ao modelo
+treinado:
+
+```bash
+python -m tetris_ai.cli.watch_agent --agent dqn --dqn-checkpoint reports/dqn_agent/<run_id>/checkpoint.pkl --seed 1000000
+```
+
 ## Contrato do ambiente
 
 Cada acao representa uma colocacao final e trava exatamente uma peca. Uma acao com `use_hold=True` faz a troca e coloca a peca resultante na mesma transicao. O espaco possui `8 * width` IDs estaveis e a observacao fornece uma mascara para as combinacoes validas.
