@@ -19,6 +19,7 @@ from .charts import (
     write_comparison_charts as _write_comparison_charts,
     write_episode_charts as _write_episode_charts,
     write_genetic_training_charts as _write_genetic_training_charts,
+    write_mapping_charts as _write_mapping_charts,
     write_paired_metric_charts as _write_paired_metric_charts,
     write_paired_reward_charts as _write_paired_reward_charts,
 )
@@ -35,6 +36,7 @@ from .storage import (
     json_safe as _json_safe,
     local_datetime as _local_datetime,
     publish_directory as _publish_directory,
+    record_as_dict as _record_as_dict,
     runtime_metadata as _runtime_metadata,
     temporary_file as _temporary_file,
     unique_mappings as _unique_mappings,
@@ -354,6 +356,76 @@ def write_genetic_training_report(
     return ReportBundle(run_id, {"GeneticAgent": final_directory})
 
 
+def write_q_table_training_report(
+    agent: object,
+    episodes: Sequence[object],
+    reports_root: str | Path,
+    *,
+    experiment: Mapping[str, object],
+    started_at: datetime | None = None,
+    completed_at: datetime | None = None,
+    command: Sequence[str] | None = None,
+) -> ReportBundle:
+    """Write a tabular Q-Learning checkpoint and its full training telemetry."""
+
+    if not episodes:
+        raise ValueError("At least one training episode is required.")
+    started = _local_datetime(started_at)
+    completed = _local_datetime(completed_at)
+    root = Path(reports_root)
+    run_id = _available_run_id(root, ("q_table_agent",), started)
+    final_directory = root / "q_table_agent" / run_id
+    rows = [dict(_record_as_dict(item)) for item in episodes]
+
+    def build(staging: Path) -> None:
+        agent.save(staging / "checkpoint.pkl")
+        _write_rows_csv(staging / "episodes.csv", rows)
+        summary = _q_table_training_summary(rows, agent)
+        _atomic_write_json(staging / "summary.json", summary)
+        _write_mapping_charts(
+            "Treinamento — Q-Learning",
+            rows,
+            (
+                ("task_return", "Retorno limpo da tarefa"),
+                ("total_reward", "Recompensa de treino"),
+                ("lines_removed", "Linhas removidas"),
+                ("q_table_entries", "Estados na Q-table"),
+            ),
+            staging / "training",
+        )
+        configuration_method = getattr(agent, "configuration", None)
+        configuration = configuration_method() if callable(configuration_method) else {}
+        metadata = {
+            "schema_version": REPORT_SCHEMA_VERSION,
+            "report_type": "agent_training",
+            "run_id": run_id,
+            "started_at": started.isoformat(),
+            "completed_at": completed.isoformat(),
+            "duration_seconds": max(0.0, (completed - started).total_seconds()),
+            "command": list(command if command is not None else sys.argv),
+            "agent": "QTableAgent",
+            "algorithm": "tabular_q_learning",
+            "configuration": _json_safe(configuration),
+            "experiment": _json_safe(experiment),
+            "visualization": _chart_renderer_metadata(),
+            "runtime": _runtime_metadata(root),
+            "artifacts": _artifact_manifest(
+                staging,
+                (
+                    "checkpoint.pkl",
+                    "episodes.csv",
+                    "summary.json",
+                    "training.svg",
+                    "training.png",
+                ),
+            ),
+        }
+        _atomic_write_json(staging / "metadata.json", metadata)
+
+    _publish_directory(final_directory, build)
+    return ReportBundle(run_id, {"QTableAgent": final_directory})
+
+
 def save_genetic_history(history: Sequence[object], destination: str | Path) -> Path:
     """Atomically persist flattened generation metrics and chromosome genes."""
 
@@ -409,6 +481,40 @@ def _evaluation_summary(
         },
         "rates": outcome_rates,
         "metrics": metrics,
+    }
+
+
+def _q_table_training_summary(rows: Sequence[Mapping[str, object]], agent: object) -> dict[str, object]:
+    numeric_metrics = (
+        "task_return",
+        "total_reward",
+        "score",
+        "lines_removed",
+        "pieces_placed",
+        "q_table_entries",
+    )
+    outcome_counts = {
+        "game_over": sum(bool(row.get("game_over")) for row in rows),
+        "horizon_completed": sum(bool(row.get("horizon_completed")) for row in rows),
+        "truncated": sum(bool(row.get("truncated")) for row in rows),
+    }
+    return {
+        "agent": "QTableAgent",
+        "primary_metric": "task_return",
+        "episode_count": len(rows),
+        "transitions_observed": int(getattr(agent, "transitions_observed", 0)),
+        "episodes_completed": int(getattr(agent, "episodes_completed", len(rows))),
+        "final_epsilon": float(getattr(agent, "epsilon", 0.0)),
+        "q_table_entries": len(getattr(agent, "q_table", {})),
+        "outcomes": {
+            name: {"count": count, "rate": count / len(rows)}
+            for name, count in outcome_counts.items()
+        },
+        "rates": {name: count / len(rows) for name, count in outcome_counts.items()},
+        "metrics": {
+            metric: _descriptive_stats([float(row[metric]) for row in rows])
+            for metric in numeric_metrics
+        },
     }
 
 

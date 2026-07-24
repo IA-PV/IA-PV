@@ -97,6 +97,30 @@ python -m tetris_ai.cli.watch_agent --agent genetic --genetic-model reports/gene
 A formulacao, os genes, os hiperparametros, o protocolo experimental e as limitacoes
 estao detalhados em [docs/GENETIC_AGENT.md](docs/GENETIC_AGENT.md).
 
+## Agente Q-Learning tabular
+
+`QTableAgent` aprende `Q[(estado, acao)]` com politica epsilon-gulosa. O estado
+discretiza o tabuleiro em cinco **Macro-Colunas** (cada uma guarda a maior altura
+de um par de colunas adjacentes, em cinco niveis), mais um balde de buracos e a
+peca atual. Isso mantem o espaco de estados tratavel (`5^5 * 4 * 7`), preservando a
+feature mais preditiva do Tetris (buracos) e a nocao espacial de onde o tabuleiro
+esta alto.
+
+Treine sem abrir o visualizador. O treino usa PBRS para dar sinal denso, mas
+reporta `task_return` separadamente; avaliacao e ranking sempre usam a recompensa
+canonica sem shaping. O relatorio inclui checkpoint, telemetria por episodio,
+resumo, graficos e hiperparametros:
+
+```bash
+python -m tetris_ai.cli.train_q_table --episodes 5000 --max-pieces 500 --seed 0
+```
+
+Monitore `avg_return`, `avg_lines`, `epsilon`, `states` (estados distintos) e
+`q_table_entries` (pares estado/acao). Inclua o checkpoint na comparacao com
+`--q-table-checkpoint reports/q_table_agent/<run_id>/checkpoint.pkl`. Como o schema
+de estado mudou, checkpoints antigos (versao 1 ou 2) sao recusados e devem ser
+retreinados.
+
 ## Contrato do ambiente
 
 Cada acao representa uma colocacao final e trava exatamente uma peca. Uma acao com `use_hold=True` faz a troca e coloca a peca resultante na mesma transicao. O espaco possui `8 * width` IDs estaveis e a observacao fornece uma mascara para as combinacoes validas.

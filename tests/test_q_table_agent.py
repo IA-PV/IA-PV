@@ -106,26 +106,50 @@ def test_q_table_agent_stops_bootstrap_at_finite_horizon_terminal() -> None:
     assert agent.observe(state, action, next_state, 3.0, terminated, truncated) == 3.0
 
 
-def test_q_table_state_includes_board_risk_hold_preview_and_budget() -> None:
+def test_q_table_state_folds_board_into_macro_columns_holes_and_piece() -> None:
     env = TetrisEnv(seed=13)
     agent = QTableAgent()
     observation = env.get_observation()
 
     state = agent._discretize_state(observation)
 
-    assert len(state) == 8
-    assert state[0].startswith("holes:")
-    assert state[1].startswith("height:")
-    assert state[2].startswith("max-height:")
-    assert state[3].startswith("bumpiness:")
-    assert state[4] == f"piece:{observation.current_piece.value}"
-    assert state[5] == "hold:none:available"
-    assert state[6] == f"next-piece:{observation.next_piece.value}"
-    assert state[7] == "remaining:76-100%"
-    assert agent._discretize_state(replace(observation, can_hold=False))[5] == (
-        "hold:none:unavailable"
+    # Five Macro-Columns (board_width // 2) + one hole bucket + current piece.
+    assert len(state) == 7
+    assert state[:5] == ("muito_baixo",) * 5
+    assert state[5] == "holes:0"
+    assert state[6] == f"piece:{observation.current_piece.value}"
+
+
+def test_q_table_macro_columns_keep_the_taller_column_of_each_pair() -> None:
+    env = TetrisEnv(seed=13)
+    agent = QTableAgent()
+    observation = env.get_observation()
+    # Adjacent pairs fold to their taller column: max(2,4)=4, max(7,6)=7,
+    # max(10,13)=13, max(5,3)=5, max(17,14)=17.
+    shaped_metrics = replace(
+        observation.metrics,
+        column_heights=(2, 4, 7, 6, 10, 13, 5, 3, 17, 14),
     )
-    assert agent._discretize_state(replace(observation, remaining_pieces=0))[7] == "remaining:0"
+    shaped = replace(observation, metrics=shaped_metrics)
+
+    state = agent._discretize_state(shaped)
+
+    assert state[:5] == ("muito_baixo", "baixo", "alto", "baixo", "muito_alto")
+
+
+def test_q_table_holes_bucket_preserves_low_end_resolution() -> None:
+    env = TetrisEnv(seed=13)
+    agent = QTableAgent()
+    observation = env.get_observation()
+
+    def holes_bucket(count: int) -> str:
+        shaped = replace(observation, metrics=replace(observation.metrics, holes=count))
+        return agent._discretize_state(shaped)[5]
+
+    assert holes_bucket(0) == "holes:0"
+    assert holes_bucket(1) == "holes:1"
+    assert holes_bucket(3) == "holes:2-3"
+    assert holes_bucket(9) == "holes:4+"
 
 
 def test_q_table_agent_persists_tuple_keys(tmp_path: Path) -> None:
@@ -133,14 +157,13 @@ def test_q_table_agent_persists_tuple_keys(tmp_path: Path) -> None:
     agent = QTableAgent(epsilon_start=0.6, epsilon_min=0.1, seed=1)
     key = (
         (
+            "muito_baixo",
+            "baixo",
+            "medio",
+            "alto",
+            "muito_alto",
             "holes:0",
-            "height:0-10",
-            "max-height:0-4",
-            "bumpiness:0-2",
             "piece:T",
-            "hold:none:available",
-            "next-piece:I",
-            "remaining:76-100%",
         ),
         3,
     )

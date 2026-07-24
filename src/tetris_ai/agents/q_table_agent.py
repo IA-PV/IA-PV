@@ -21,19 +21,23 @@ from ..env.observation import Observation
 from .base import Agent
 
 
-DiscreteState: TypeAlias = tuple[str, str, str, str, str, str, str, str]
+DiscreteState: TypeAlias = tuple[str, ...]
 QKey: TypeAlias = tuple[DiscreteState, int]
-_CHECKPOINT_VERSION = 2
+_CHECKPOINT_VERSION = 3
 
 
 class QTableAgent(Agent):
     """A dictionary-based Q-Learning agent with an epsilon-greedy policy.
 
     States are discretized from featured observations as
-    ``(holes, aggregate_height, max_height, bumpiness, current_piece, hold,
-    next_piece, remaining_budget)``.  The hold component includes whether hold
-    is currently available, preventing two strategically different states from
-    aliasing merely because the held tetromino is the same.
+    ``(macro_column_0, ..., macro_column_{k-1}, holes, current_piece)``.  The
+    board's columns are folded into ``board_width // 2`` *Macro-Columns*: each
+    Macro-Column keeps the taller of an adjacent column pair and is bucketed
+    into five height levels.  A compact hole bucket preserves the single most
+    predictive Tetris feature, which pure heights cannot express.  This keeps
+    the tabular state space small enough to visit repeatedly (for the default
+    ten-wide board, ``5^5`` height combinations times four hole buckets times
+    seven pieces).
     An action is encoded with :meth:`Action.to_id`, therefore each Q-table entry
     follows the classical ``Q[(state, action_id)] -> float`` form.
 
@@ -259,7 +263,12 @@ class QTableAgent(Agent):
             if checkpoint_version == 1:
                 raise ValueError(
                     "Q-table checkpoint version 1 uses the legacy four-component state schema; "
-                    "it is incompatible with the budget-aware state schema and must be retrained."
+                    "it is incompatible with the Macro-Column state schema and must be retrained."
+                )
+            if checkpoint_version == 2:
+                raise ValueError(
+                    "Q-table checkpoint version 2 uses the eight-component board-risk state schema; "
+                    "it is incompatible with the Macro-Column state schema and must be retrained."
                 )
             raise ValueError(
                 f"Unsupported Q-table checkpoint version {checkpoint_version!r}; "
@@ -300,85 +309,61 @@ class QTableAgent(Agent):
         self.episodes_completed = int(payload.get("episodes_completed", 0))
 
     def _discretize_state(self, observation: Observation) -> DiscreteState:
-        """Map a featured observation into a compact, hashable tabular state.
+        """Fold the board into height Macro-Columns plus holes and the piece.
 
-        The bins preserve enough resolution to distinguish increasingly risky
-        board structures while still allowing repeated state visits:
+        The ``board_width`` columns are paired left to right; each Macro-Column
+        keeps the taller column of its pair and is bucketed into five levels.
+        A separate hole bucket keeps the agent aware of buried cells, which pure
+        heights cannot express, and the current piece is retained because the
+        best placement depends on both the surface shape and the piece.
 
-        * holes: ``0``, ``1``, ``2``, ``3-4``, ``5-6``, ``7+``;
-        * aggregate height: ``0-10``, ``11-20``, ``21-30``, ``31-40``, ``41+``;
-        * maximum height: ``0-4``, ``5-8``, ``9-12``, ``13-16``, ``17+``;
-        * bumpiness: ``0-2``, ``3-5``, ``6-9``, ``10-14``, ``15+``;
-        * current, held and next pieces (including hold availability);
-        * remaining finite-horizon budget: ``0``, ``1-10%``, ``11-25%``,
-          ``26-50%``, ``51-75%`` or ``76-100%``.
+        * Macro-Column height: ``0-4`` muito_baixo, ``5-8`` baixo, ``9-12``
+          medio, ``13-16`` alto, ``17+`` muito_alto;
+        * holes: ``0``, ``1``, ``2-3``, ``4+``;
+        * current piece (``none`` for a finished board).
         """
         metrics = observation.metrics
         if metrics is None:
             raise ValueError("QTableAgent requires TetrisConfig(observation_mode='featured').")
         self._validate_observation_budget(observation)
 
-        if metrics.holes == 0:
-            holes_bucket = "holes:0"
-        elif metrics.holes == 1:
-            holes_bucket = "holes:1"
-        elif metrics.holes == 2:
-            holes_bucket = "holes:2"
-        elif metrics.holes <= 4:
-            holes_bucket = "holes:3-4"
-        elif metrics.holes <= 6:
-            holes_bucket = "holes:5-6"
-        else:
-            holes_bucket = "holes:7+"
+        heights = metrics.column_heights
+        if len(heights) != self.board_width:
+            raise ValueError("Observation column heights do not match QTableAgent.board_width.")
+        if self.board_width % 2 != 0:
+            raise ValueError("QTableAgent Macro-Column discretization requires an even board width.")
 
-        if metrics.aggregate_height <= 10:
-            height_bucket = "height:0-10"
-        elif metrics.aggregate_height <= 20:
-            height_bucket = "height:11-20"
-        elif metrics.aggregate_height <= 30:
-            height_bucket = "height:21-30"
-        elif metrics.aggregate_height <= 40:
-            height_bucket = "height:31-40"
-        else:
-            height_bucket = "height:41+"
-
-        if metrics.max_height <= 4:
-            max_height_bucket = "max-height:0-4"
-        elif metrics.max_height <= 8:
-            max_height_bucket = "max-height:5-8"
-        elif metrics.max_height <= 12:
-            max_height_bucket = "max-height:9-12"
-        elif metrics.max_height <= 16:
-            max_height_bucket = "max-height:13-16"
-        else:
-            max_height_bucket = "max-height:17+"
-
-        if metrics.bumpiness <= 2:
-            bumpiness_bucket = "bumpiness:0-2"
-        elif metrics.bumpiness <= 5:
-            bumpiness_bucket = "bumpiness:3-5"
-        elif metrics.bumpiness <= 9:
-            bumpiness_bucket = "bumpiness:6-9"
-        elif metrics.bumpiness <= 14:
-            bumpiness_bucket = "bumpiness:10-14"
-        else:
-            bumpiness_bucket = "bumpiness:15+"
-
-        piece = observation.current_piece.value if observation.current_piece is not None else "none"
-        held_piece = observation.hold_piece.value if observation.hold_piece is not None else "none"
-        next_piece = observation.next_piece.value if observation.next_piece is not None else "none"
-        hold_availability = "available" if observation.can_hold else "unavailable"
-        remaining_budget_bucket = self._remaining_budget_bucket(observation.remaining_pieces)
-        return (
-            holes_bucket,
-            height_bucket,
-            max_height_bucket,
-            bumpiness_bucket,
-            f"piece:{piece}",
-            f"hold:{held_piece}:{hold_availability}",
-            f"next-piece:{next_piece}",
-            remaining_budget_bucket,
+        # Fold adjacent column pairs into Macro-Columns, keeping the taller side
+        # so the state reflects where the board is dangerously high.
+        macro_columns = tuple(
+            self._height_bucket(max(heights[index], heights[index + 1]))
+            for index in range(0, self.board_width, 2)
         )
+        holes_bucket = self._holes_bucket(metrics.holes)
+        piece = observation.current_piece.value if observation.current_piece is not None else "none"
+        return (*macro_columns, holes_bucket, f"piece:{piece}")
+
+    @staticmethod
+    def _height_bucket(height: int) -> str:
+        if height <= 4:
+            return "muito_baixo"
+        if height <= 8:
+            return "baixo"
+        if height <= 12:
+            return "medio"
+        if height <= 16:
+            return "alto"
+        return "muito_alto"
+
+    @staticmethod
+    def _holes_bucket(holes: int) -> str:
+        if holes == 0:
+            return "holes:0"
+        if holes == 1:
+            return "holes:1"
+        if holes <= 3:
+            return "holes:2-3"
+        return "holes:4+"
 
     def _max_future_q(
         self,
@@ -406,20 +391,6 @@ class QTableAgent(Agent):
             )
         if not 0 <= observation.remaining_pieces <= observation.max_pieces:
             raise ValueError("Observation remaining_pieces must be between zero and max_pieces.")
-
-    def _remaining_budget_bucket(self, remaining_pieces: int) -> str:
-        if remaining_pieces == 0:
-            return "remaining:0"
-        fraction = remaining_pieces / self.max_pieces
-        if fraction <= 0.10:
-            return "remaining:1-10%"
-        if fraction <= 0.25:
-            return "remaining:11-25%"
-        if fraction <= 0.50:
-            return "remaining:26-50%"
-        if fraction <= 0.75:
-            return "remaining:51-75%"
-        return "remaining:76-100%"
 
     def _validate_context(self, context: DecisionContext) -> None:
         if not context.legal_actions:
@@ -455,7 +426,7 @@ class QTableAgent(Agent):
         state, action_id = key
         if (
             not isinstance(state, tuple)
-            or len(state) != 8
+            or len(state) != self.board_width // 2 + 2
             or not all(isinstance(value, str) for value in state)
             or not isinstance(action_id, int)
             or not 0 <= action_id < 8 * self.board_width
