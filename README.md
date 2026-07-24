@@ -61,20 +61,23 @@ h(n) = 35.6 * buracos + 0.51 * altura_agregada
 
 O terceiro agente evolui os pesos de uma politica linear sobre dez atributos
 normalizados e usa lookahead limitado por beam search. Cada geracao enfrenta um lote
-novo de sementes, e campeoes geracionais sao comparados em sementes separadas de
-validacao. Selecao por torneio, crossover aritmetico, mutacao gaussiana e elitismo
-produzem as proximas geracoes.
+novo de sementes. Uma terceira familia fixa de sementes, separada do treino e da
+validacao final, produz uma curva de monitoramento comparavel entre geracoes sem
+participar da selecao. Selecao por torneio, crossover aritmetico, mutacao gaussiana
+com annealing e um arquivo de elites com memoria de ranking produzem as proximas
+geracoes. Ao final, os campeoes historicos ainda sao reranqueados nas sementes
+exclusivas de validacao.
 
 Treine e salve o cromossomo, os hiperparametros e a curva de evolucao:
 
 ```bash
-python -m tetris_ai.cli.train_genetic_agent --population-size 16 --generations 10 --episodes-per-individual 4 --validation-episodes 12 --max-pieces 200 --lookahead-depth 2 --lookahead-beam-width 2 --seed 0 --workers 0
+python -m tetris_ai.cli.train_genetic_agent --population-size 16 --generations 10 --episodes-per-individual 8 --monitoring-episodes 8 --validation-episodes 12 --max-pieces 200 --mutation-stddev 0.25 --final-mutation-stddev 0.05 --lookahead-depth 2 --lookahead-beam-width 2 --seed 0 --workers 0
 ```
 
 Compare os tres agentes em sementes separadas das usadas no treino:
 
 ```bash
-python -m tetris_ai.cli.evaluate_agents --episodes 50 --seed 1000000 --max-pieces 500 --search-depth 3 --beam-width 8 --genetic-model reports/genetic_agent/<run_id>/model.json --workers 0
+python -m tetris_ai.cli.evaluate_agents --agents state-goal genetic q-table --episodes 50 --seed 1000000 --max-pieces 500 --search-depth 3 --beam-width 8 --genetic-model reports/genetic_agent/<run_id>/model.json --q-table-checkpoint reports/q_table_agent/<run_id>/checkpoint.pkl --workers 0
 ```
 
 Depois de congelar políticas e hiperparâmetros, repita como teste de estresse em

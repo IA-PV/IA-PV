@@ -22,6 +22,14 @@ from ..evaluation import EpisodeResult, evaluate_episode
 from ..execution import resolve_worker_count
 from ..reporting import write_evaluation_reports
 
+_AGENT_CHOICES = ("state-goal", "genetic", "q-table", "dqn")
+_AGENT_KIND_BY_OPTION = {
+    "state-goal": "state_goal",
+    "genetic": "genetic",
+    "q-table": "q_table",
+    "dqn": "dqn",
+}
+
 
 @dataclass(frozen=True)
 class _EvaluationTask:
@@ -84,6 +92,17 @@ def main() -> None:
         help="Optional trained Q-table checkpoint to include in the comparison report.",
     )
     parser.add_argument(
+        "--agents",
+        nargs="+",
+        choices=_AGENT_CHOICES,
+        default=None,
+        help=(
+            "Agents to evaluate. When omitted, enabled model artifacts are added to the "
+            "random and heuristic baselines; select state-goal genetic q-table to compare "
+            "exactly those three."
+        ),
+    )
+    parser.add_argument(
         "--genetic-model",
         type=Path,
         help="Optional JSON produced by train_genetic_agent; includes GeneticAgent in the comparison.",
@@ -124,12 +143,27 @@ def main() -> None:
         parser.error("--max-nodes-expanded must be non-negative.")
     if args.beam_width is not None and args.beam_width <= 0:
         parser.error("--beam-width must be positive.")
+    selected_options = tuple(args.agents or ())
+    if len(set(selected_options)) != len(selected_options):
+        parser.error("--agents must not contain duplicate agent names.")
     if args.q_table_checkpoint is not None and not args.q_table_checkpoint.is_file():
         parser.error("--q-table-checkpoint must point to an existing checkpoint file.")
     if args.dqn_checkpoint is not None and not args.dqn_checkpoint.is_file():
         parser.error("--dqn-checkpoint must point to an existing checkpoint file.")
     if args.workers < 0:
         parser.error("--workers must be zero or a positive integer.")
+    if "q-table" in selected_options and args.q_table_checkpoint is None:
+        parser.error("--q-table-checkpoint is required when --agents includes q-table.")
+    if "genetic" in selected_options and args.genetic_model is None:
+        parser.error("--genetic-model is required when --agents includes genetic.")
+    if "dqn" in selected_options and args.dqn_checkpoint is None:
+        parser.error("--dqn-checkpoint is required when --agents includes dqn.")
+    if selected_options and "q-table" not in selected_options and args.q_table_checkpoint is not None:
+        parser.error("--q-table-checkpoint requires --agents to include q-table.")
+    if selected_options and "genetic" not in selected_options and args.genetic_model is not None:
+        parser.error("--genetic-model requires --agents to include genetic.")
+    if selected_options and "dqn" not in selected_options and args.dqn_checkpoint is not None:
+        parser.error("--dqn-checkpoint requires --agents to include dqn.")
 
     genetic_model = None
     if args.genetic_model is not None:
@@ -154,6 +188,11 @@ def main() -> None:
         search_strategy=args.search_strategy,
         max_nodes_expanded=args.max_nodes_expanded or None,
         beam_width=args.beam_width,
+        agent_kinds=(
+            tuple(_AGENT_KIND_BY_OPTION[agent] for agent in selected_options)
+            if selected_options
+            else None
+        ),
         genetic_model=genetic_model,
         q_table_checkpoint=args.q_table_checkpoint,
         dqn_checkpoint=args.dqn_checkpoint,
@@ -201,6 +240,7 @@ def main() -> None:
         args.reports_root,
         experiment={
             "episodes": args.episodes,
+            "agents": list(selected_options) if selected_options else None,
             "first_seed": args.seed,
             "seeds": list(range(args.seed, args.seed + args.episodes)),
             "environment_config_id": environment_config.fingerprint,
@@ -236,56 +276,83 @@ def _build_evaluation_tasks(
     max_pieces: int,
     search_depth: int,
     beam_width: int | None = None,
+    agent_kinds: tuple[str, ...] | None = None,
     genetic_model: GeneticModel | None = None,
     q_table_checkpoint: Path | None = None,
     dqn_checkpoint: Path | None = None,
+    rl_checkpoint: Path | None = None,
     search_strategy: str = "greedy",
     max_nodes_expanded: int | None = 2_000,
     allow_horizon_transfer: bool = False,
 ) -> list[_EvaluationTask]:
+    if rl_checkpoint is not None:
+        raise ValueError(
+            "The RL agent was removed; train a DQN with train_dqn and use --dqn-checkpoint."
+        )
+    if agent_kinds is None:
+        selected_kinds = ["state_goal"]
+        if q_table_checkpoint is not None:
+            selected_kinds.append("q_table")
+        if genetic_model is not None:
+            selected_kinds.append("genetic")
+        if dqn_checkpoint is not None:
+            selected_kinds.append("dqn")
+        agent_kinds = tuple(selected_kinds)
+    if not agent_kinds:
+        raise ValueError("At least one agent kind is required for evaluation.")
     tasks: list[_EvaluationTask] = []
     for episode in range(episodes):
         seed = first_seed + episode
-        tasks.append(
-            _EvaluationTask(
-                "state_goal",
-                seed,
-                max_pieces,
-                search_depth=search_depth,
-                search_strategy=search_strategy,
-                max_nodes_expanded=max_nodes_expanded,
-                beam_width=beam_width,
-            )
-        )
-        if q_table_checkpoint is not None:
-            tasks.append(
-                _EvaluationTask(
-                    "q_table",
-                    seed,
-                    max_pieces,
-                    checkpoint=q_table_checkpoint,
-                    allow_horizon_transfer=allow_horizon_transfer,
+        for agent_kind in agent_kinds:
+            if agent_kind == "state_goal":
+                tasks.append(
+                    _EvaluationTask(
+                        "state_goal",
+                        seed,
+                        max_pieces,
+                        search_depth=search_depth,
+                        search_strategy=search_strategy,
+                        max_nodes_expanded=max_nodes_expanded,
+                        beam_width=beam_width,
+                    )
                 )
-            )
-        if genetic_model is not None:
-            tasks.append(
-                _EvaluationTask(
-                    "genetic",
-                    seed,
-                    max_pieces,
-                    genetic_model=genetic_model,
+            elif agent_kind == "q_table":
+                if q_table_checkpoint is None:
+                    raise ValueError("Q-table evaluation requires a checkpoint.")
+                tasks.append(
+                    _EvaluationTask(
+                        "q_table",
+                        seed,
+                        max_pieces,
+                        checkpoint=q_table_checkpoint,
+                        allow_horizon_transfer=allow_horizon_transfer,
+                    )
                 )
-            )
-        if dqn_checkpoint is not None:
-            tasks.append(
-                _EvaluationTask(
-                    "dqn",
-                    seed,
-                    max_pieces,
-                    checkpoint=dqn_checkpoint,
-                    allow_horizon_transfer=allow_horizon_transfer,
+            elif agent_kind == "genetic":
+                if genetic_model is None:
+                    raise ValueError("Genetic evaluation requires a loaded model.")
+                tasks.append(
+                    _EvaluationTask(
+                        "genetic",
+                        seed,
+                        max_pieces,
+                        genetic_model=genetic_model,
+                    )
                 )
-            )
+            elif agent_kind == "dqn":
+                if dqn_checkpoint is None:
+                    raise ValueError("DQN evaluation requires a checkpoint.")
+                tasks.append(
+                    _EvaluationTask(
+                        "dqn",
+                        seed,
+                        max_pieces,
+                        checkpoint=dqn_checkpoint,
+                        allow_horizon_transfer=allow_horizon_transfer,
+                    )
+                )
+            else:
+                raise ValueError(f"Unknown evaluation agent kind: {agent_kind!r}.")
     return tasks
 
 

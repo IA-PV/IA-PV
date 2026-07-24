@@ -37,6 +37,15 @@ def main() -> None:
         help="Shared training episodes per individual in each generation.",
     )
     parser.add_argument(
+        "--monitoring-episodes",
+        type=int,
+        default=defaults.monitoring_episodes,
+        help=(
+            "Fixed diagnostic episodes per generation; never used for evolution "
+            "or final model selection."
+        ),
+    )
+    parser.add_argument(
         "--validation-episodes",
         type=int,
         default=defaults.validation_episodes,
@@ -58,7 +67,19 @@ def main() -> None:
         "--elite-count",
         type=int,
         default=defaults.elite_count,
-        help="Best individuals copied and retained as validation candidates.",
+        help="Generation winners retained as final-validation candidates.",
+    )
+    parser.add_argument(
+        "--elite-archive-capacity",
+        type=int,
+        default=defaults.elite_archive_capacity,
+        help="Maximum robust elites preserved between generations.",
+    )
+    parser.add_argument(
+        "--elite-memory-alpha",
+        type=float,
+        default=defaults.elite_memory_alpha,
+        help="EMA weight assigned to an elite's current normalized rank.",
     )
     parser.add_argument(
         "--tournament-size",
@@ -82,7 +103,19 @@ def main() -> None:
         "--mutation-stddev",
         type=float,
         default=defaults.mutation_stddev,
-        help="Standard deviation of Gaussian gene mutations.",
+        help="Initial standard deviation of Gaussian gene mutations.",
+    )
+    parser.add_argument(
+        "--final-mutation-stddev",
+        type=float,
+        default=defaults.final_mutation_stddev,
+        help="Final mutation standard deviation reached by annealing.",
+    )
+    parser.add_argument(
+        "--mutation-schedule",
+        choices=("linear", "exponential"),
+        default=defaults.mutation_schedule,
+        help="Annealing schedule for the mutation standard deviation.",
     )
     parser.add_argument(
         "--lookahead-depth",
@@ -106,7 +139,20 @@ def main() -> None:
         "--seed",
         type=int,
         default=defaults.seed,
-        help="Root seed for evolution, rotating training batches and validation.",
+        help=(
+            "Root seed for evolution plus disjoint training, validation and "
+            "monitoring batches."
+        ),
+    )
+    parser.add_argument(
+        "--freeze-genes",
+        nargs="*",
+        default=list(defaults.frozen_genes),
+        metavar="GENE",
+        help=(
+            "Gene names held at zero for the whole run (ablation study). "
+            "Example: --freeze-genes use_hold hold_store_i hold_retrieve_i i_well_match"
+        ),
     )
     parser.add_argument(
         "--workers",
@@ -144,18 +190,24 @@ def main() -> None:
             population_size=args.population_size,
             generations=args.generations,
             episodes_per_individual=args.episodes_per_individual,
+            monitoring_episodes=args.monitoring_episodes,
             validation_episodes=args.validation_episodes,
             max_pieces=args.max_pieces,
             validation_max_pieces=args.validation_max_pieces,
             elite_count=args.elite_count,
+            elite_archive_capacity=args.elite_archive_capacity,
+            elite_memory_alpha=args.elite_memory_alpha,
             tournament_size=args.tournament_size,
             crossover_rate=args.crossover_rate,
             mutation_rate=args.mutation_rate,
             mutation_stddev=args.mutation_stddev,
+            final_mutation_stddev=args.final_mutation_stddev,
+            mutation_schedule=args.mutation_schedule,
             lookahead_depth=args.lookahead_depth,
             lookahead_beam_width=args.lookahead_beam_width,
             lookahead_discount=args.lookahead_discount,
             seed=args.seed,
+            frozen_genes=tuple(args.freeze_genes),
         )
     except ValueError as error:
         parser.error(str(error))
@@ -204,13 +256,19 @@ def _project_root() -> Path:
 
 
 def _print_progress(stats: GenerationStats) -> None:
+    mutation = (
+        f"{stats.reproduction_mutation_stddev:.4f}"
+        if stats.reproduction_mutation_stddev is not None
+        else "final"
+    )
     print(
         f"generation={stats.generation:3d} "
-        f"seeds={stats.training_seeds} "
-        f"task-return(best/mean/worst)={stats.best_fitness:8.3f}/"
+        f"train-seeds={stats.training_seeds} "
+        f"train-return(best/mean/worst)={stats.best_fitness:8.3f}/"
         f"{stats.mean_fitness:8.3f}/{stats.worst_fitness:8.3f} "
-        f"lines={stats.best_mean_lines:6.2f} "
-        f"pieces={stats.best_mean_pieces:6.2f}"
+        f"monitor-return={stats.monitoring_fitness:8.3f} "
+        f"elite-reputation={stats.elite_reputation:.3f} "
+        f"mutation-stddev={mutation}"
     )
 
 

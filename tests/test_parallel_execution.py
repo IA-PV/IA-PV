@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from tetris_ai.agents import (
     GeneticModel,
     GeneticPolicyConfig,
@@ -61,15 +63,34 @@ def test_agent_evaluation_is_identical_serial_and_parallel() -> None:
     ]
 
 
+def test_evaluation_can_select_exactly_heuristic_genetic_and_q_table() -> None:
+    checkpoint = Path("trusted-q-table.pkl")
+    tasks = _build_evaluation_tasks(
+        episodes=1,
+        first_seed=41,
+        max_pieces=1,
+        search_depth=1,
+        beam_width=1,
+        agent_kinds=("state_goal", "genetic", "q_table"),
+        genetic_model=_genetic_model(),
+        q_table_checkpoint=checkpoint,
+        rl_checkpoint=None,
+    )
+
+    assert [task.agent_kind for task in tasks] == ["state_goal", "genetic", "q_table"]
+
+
 def test_genetic_training_is_identical_serial_and_parallel() -> None:
     config = GeneticAlgorithmConfig(
-        population_size=2,
-        generations=1,
+        population_size=4,
+        generations=2,
         episodes_per_individual=1,
+        monitoring_episodes=1,
         validation_episodes=1,
         max_pieces=1,
         validation_max_pieces=1,
         elite_count=1,
+        elite_archive_capacity=2,
         tournament_size=2,
         lookahead_depth=1,
         lookahead_beam_width=1,

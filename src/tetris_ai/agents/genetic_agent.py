@@ -16,22 +16,31 @@ from ..env.context import DecisionContext, SimulatedTransition
 from .base import Agent
 
 
-LEGACY_GENE_NAMES: tuple[str, ...] = (
+# Genes that older schemas learned but the current policy no longer exposes.
+# ``game_over`` is now a hard search constraint, not a weight; loading an older
+# artifact drops these genes instead of rejecting it.
+DEPRECATED_GENE_NAMES: tuple[str, ...] = ("game_over",)
+
+GENE_NAMES: tuple[str, ...] = (
     "lines_cleared",
     "aggregate_height",
     "holes",
     "bumpiness",
     "max_height",
-    "game_over",
+    "row_transitions",
+    "column_transitions",
+    "wells",
+    "landing_height",
     "use_hold",
-)
-
-GENE_NAMES: tuple[str, ...] = (
-    *LEGACY_GENE_NAMES,
     "hold_store_i",
     "hold_retrieve_i",
     "i_well_match",
 )
+
+# A top-out is a hard failure, not a weighted preference.  The search subtracts
+# this from any placement that ends the game early so such moves are chosen only
+# when no survivable placement exists.  It dwarfs the unit-norm linear values.
+TOP_OUT_PENALTY: float = 1.0e6
 
 
 @dataclass(frozen=True)
@@ -104,7 +113,7 @@ class GeneticModel:
 
     chromosome: LinearChromosome
     policy_config: GeneticPolicyConfig = field(default_factory=GeneticPolicyConfig)
-    schema_version: int = 3
+    schema_version: int = 5
     fitness_metric: str | None = None
     ruleset_version: str | None = None
     environment_config_id: str | None = None
@@ -138,7 +147,10 @@ class ActionFeatures:
     holes: float
     bumpiness: float
     max_height: float
-    game_over: float
+    row_transitions: float
+    column_transitions: float
+    wells: float
+    landing_height: float
     use_hold: float
     hold_store_i: float
     hold_retrieve_i: float
@@ -183,33 +195,30 @@ def extract_action_features(
 
     board_area = width * height
     max_bumpiness = max(1, height * (width - 1))
+    max_row_transitions = max(1, height * (width + 1))
+    max_column_transitions = max(1, width * (height + 1))
     placed_piece = transition.info.get("placed_piece")
-    before_well_depth = _normalized_well_depth(
-        before_metrics.column_heights,
-        board_height=height,
-    )
-    after_well_depth = _normalized_well_depth(
-        metrics.column_heights,
-        board_height=height,
-    )
-    termination_reason = transition.info.get("termination_reason")
-    termination_reasons = (
-        set(str(termination_reason).split("+")) if termination_reason else set()
-    )
+    placed_row = transition.info.get("placed_row")
+    before_well = before_metrics.wells / board_area
+    after_well = metrics.wells / board_area
     features = ActionFeatures(
         lines_cleared=float(transition.info.get("lines_cleared", 0)) / 4.0,
         aggregate_height=metrics.aggregate_height / board_area,
         holes=metrics.holes / board_area,
         bumpiness=metrics.bumpiness / max_bumpiness,
         max_height=metrics.max_height / height,
-        # `terminated` also covers completion of the finite experiment
-        # horizon in planning-v2.  This gene models top-out only.
-        game_over=float("game_over" in termination_reasons),
+        row_transitions=metrics.row_transitions / max_row_transitions,
+        column_transitions=metrics.column_transitions / max_column_transitions,
+        wells=after_well,
+        # Height at which the piece came to rest; higher landings are riskier.
+        landing_height=(
+            (height - placed_row) / height if placed_row is not None else 0.0
+        ),
         use_hold=float(action.use_hold),
         hold_store_i=float(action.use_hold and before.current_piece == PieceType.I),
         hold_retrieve_i=float(action.use_hold and before.hold_piece == PieceType.I),
         i_well_match=(
-            max(0.0, before_well_depth - after_well_depth)
+            max(0.0, before_well - after_well)
             if placed_piece == PieceType.I.value
             else 0.0
         ),
@@ -217,23 +226,17 @@ def extract_action_features(
     return features, transition
 
 
-def _normalized_well_depth(
-    column_heights: tuple[int, ...],
-    board_height: int,
-) -> float:
-    """Return the summed depth of wells, normalized to the board area."""
+def _causes_top_out(transition: SimulatedTransition) -> bool:
+    """Return whether a placement ends the game early (a real Tetris loss).
 
-    if not column_heights or board_height <= 0:
-        return 0.0
-    well_depth = 0
-    last_column = len(column_heights) - 1
-    for index, column_height in enumerate(column_heights):
-        left_height = board_height if index == 0 else column_heights[index - 1]
-        right_height = (
-            board_height if index == last_column else column_heights[index + 1]
-        )
-        well_depth += max(0, min(left_height, right_height) - column_height)
-    return well_depth / (board_height * len(column_heights))
+    Completion of the finite planning-v2 horizon is terminal for the MDP but is
+    not a loss, so it is deliberately excluded here.
+    """
+
+    reason = transition.info.get("termination_reason")
+    if not reason:
+        return False
+    return "game_over" in str(reason).split("+")
 
 
 class GeneticAgent(Agent):
@@ -330,6 +333,11 @@ class GeneticAgent(Agent):
                 strict=True,
             )
         )
+        # Top-out avoidance is a hard constraint, not a learned weight: penalise
+        # game-ending placements so they lose to any survivable alternative and
+        # so the penalty propagates back through the lookahead.
+        if _causes_top_out(transition):
+            value -= TOP_OUT_PENALTY
         return _EvaluatedAction(action, value, transition)
 
     def decision_metrics(self) -> dict[str, int | float | str | None]:
@@ -377,9 +385,10 @@ def load_genetic_model(
     schema_version = payload.get("schema_version", 1)
     if not isinstance(schema_version, int):
         raise ValueError("Genetic model 'schema_version' must be an integer.")
-    if schema_version not in (1, 2, 3):
+    if schema_version not in (1, 2, 3, 4, 5):
         raise ValueError(
-            f"Unsupported genetic model schema_version {schema_version}; expected 1, 2, or 3."
+            "Unsupported genetic model schema_version "
+            f"{schema_version}; expected 1, 2, 3, 4, or 5."
         )
 
     raw_fitness_metric = payload.get("fitness_metric")
@@ -469,8 +478,26 @@ def _chromosome_payload(
 def _load_compatible_chromosome(
     raw_chromosome: Mapping[str, object],
 ) -> LinearChromosome:
-    if set(raw_chromosome) == set(LEGACY_GENE_NAMES):
-        migrated = {name: raw_chromosome[name] for name in LEGACY_GENE_NAMES}
-        migrated.update({name: 0.0 for name in GENE_NAMES if name not in migrated})
-        return LinearChromosome.from_dict(migrated)
-    return LinearChromosome.from_dict(raw_chromosome)
+    """Load a chromosome from any historical gene set.
+
+    Genes that the current policy no longer exposes (e.g. ``game_over``, now a
+    hard search constraint) are dropped, and genes introduced by a newer schema
+    default to zero, reproducing the older policy's behaviour.  Truly unknown
+    gene names are still rejected.
+    """
+
+    provided = set(raw_chromosome)
+    if provided == set(GENE_NAMES):
+        return LinearChromosome.from_dict(raw_chromosome)
+    unknown = provided - set(GENE_NAMES) - set(DEPRECATED_GENE_NAMES)
+    if unknown:
+        raise ValueError(
+            "Invalid chromosome mapping (unknown genes: "
+            + ", ".join(sorted(str(name) for name in unknown))
+            + ")."
+        )
+    migrated = {
+        name: raw_chromosome[name] if name in raw_chromosome else 0.0
+        for name in GENE_NAMES
+    }
+    return LinearChromosome.from_dict(migrated)

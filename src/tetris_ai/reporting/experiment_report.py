@@ -318,6 +318,8 @@ def write_genetic_training_report(
                 for generation in range(result.config.generations)
                 for seed in result.config.training_seeds(generation)
             ],
+            "monitoring_seeds": list(result.config.monitoring_seeds),
+            "monitoring_role": "diagnostic_only_not_used_for_selection",
             "validation_seeds": list(result.config.validation_seeds),
         }
         _atomic_write_json(staging / "summary.json", summary)
