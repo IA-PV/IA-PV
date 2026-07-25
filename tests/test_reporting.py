@@ -250,6 +250,96 @@ def test_genetic_training_report_contains_canonical_model_history_and_chart(
     assert metadata["artifacts"]["model.json"]["sha256"]
 
 
+def test_genetic_report_surfaces_held_out_test_and_discrimination(
+    tmp_path: Path,
+) -> None:
+    config = GeneticAlgorithmConfig(
+        population_size=3,
+        generations=2,
+        episodes_per_individual=1,
+        monitoring_episodes=1,
+        validation_episodes=2,
+        test_episodes=3,
+        max_pieces=3,
+        validation_max_pieces=3,
+        elite_count=1,
+        tournament_size=2,
+        lookahead_depth=1,
+        seed=8,
+    )
+    result = GeneticTrainer(config).train()
+    timestamp = datetime(2026, 7, 17, tzinfo=timezone.utc)
+
+    bundle = write_genetic_training_report(
+        result,
+        tmp_path,
+        started_at=timestamp,
+        completed_at=timestamp + timedelta(seconds=1),
+    )
+
+    directory = bundle.agent_directories["GeneticAgent"]
+    # The guard-rails add fields, never new files.
+    assert {path.name for path in directory.iterdir()} == {
+        "history.csv",
+        "metadata.json",
+        "model.json",
+        "summary.json",
+        "training.svg",
+        "training.png",
+    }
+    summary = json.loads((directory / "summary.json").read_text(encoding="utf-8"))
+
+    test_block = summary["test_evaluation"]
+    assert test_block is not None
+    assert test_block["role"] == "held_out_unbiased_estimate_not_used_for_selection"
+    assert test_block["episode_count"] == 3
+    assert test_block["seeds"] == list(config.test_seeds)
+    assert test_block["task_return_mean"] == result.test_evaluation.fitness
+    assert "reward_per_piece" in test_block["discrimination"]
+
+    assert set(summary["validation_discrimination"]) == {
+        "reward_per_piece",
+        "lines_per_piece",
+        "score_per_line",
+        "score_per_piece",
+    }
+    assert summary["convergence"]["signal"] == "fixed_seed_monitoring_fitness"
+    assert "diversity_at_plateau" in summary["convergence"]
+    assert "optimistically biased" in summary["selection_integrity_note"]
+
+
+def test_genetic_report_test_block_is_absent_when_bank_disabled(
+    tmp_path: Path,
+) -> None:
+    config = GeneticAlgorithmConfig(
+        population_size=2,
+        generations=1,
+        episodes_per_individual=1,
+        monitoring_episodes=1,
+        validation_episodes=1,
+        max_pieces=1,
+        validation_max_pieces=1,
+        elite_count=1,
+        tournament_size=2,
+        lookahead_depth=1,
+        seed=4,
+    )
+    result = GeneticTrainer(config).train()
+    timestamp = datetime(2026, 7, 17, tzinfo=timezone.utc)
+
+    bundle = write_genetic_training_report(
+        result, tmp_path, started_at=timestamp, completed_at=timestamp
+    )
+    summary = json.loads(
+        (bundle.agent_directories["GeneticAgent"] / "summary.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    assert summary["test_evaluation"] is None
+    assert summary["validation_discrimination"]["reward_per_piece"] is not None
+
+
 def test_evaluation_cli_publishes_the_default_agent(tmp_path: Path, monkeypatch) -> None:
     from tetris_ai.cli.evaluate_agents import main
 

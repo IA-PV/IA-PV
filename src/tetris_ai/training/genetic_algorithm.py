@@ -34,6 +34,14 @@ class GeneticAlgorithmConfig:
     validation_episodes: int = 12
     max_pieces: int = 200
     validation_max_pieces: int = 500
+    # Held-out TEST bank, disjoint from training/validation/monitoring, used
+    # ONCE to score the already-selected model. It never influences selection,
+    # so it yields an unbiased estimate free of the winner's-curse optimism that
+    # taints ``best_fitness`` (a max over many candidates on the validation
+    # seeds). ``test_episodes == 0`` disables it (fully backward compatible);
+    # ``test_max_pieces == 0`` reuses the validation horizon.
+    test_episodes: int = 0
+    test_max_pieces: int = 0
     elite_count: int = 2
     elite_archive_capacity: int = 4
     elite_memory_alpha: float = 0.25
@@ -64,6 +72,10 @@ class GeneticAlgorithmConfig:
             raise ValueError("validation_episodes must be positive.")
         if self.max_pieces <= 0 or self.validation_max_pieces <= 0:
             raise ValueError("max_pieces and validation_max_pieces must be positive.")
+        if self.test_episodes < 0:
+            raise ValueError("test_episodes must be zero (disabled) or positive.")
+        if self.test_max_pieces < 0:
+            raise ValueError("test_max_pieces must be zero (reuse validation) or positive.")
         if not 1 <= self.elite_count < self.population_size:
             raise ValueError("elite_count must be between 1 and population_size - 1.")
         if self.elite_archive_capacity < self.elite_count:
@@ -127,6 +139,31 @@ class GeneticAlgorithmConfig:
             + self.validation_episodes
         )
         return tuple(start + offset for offset in range(self.monitoring_episodes))
+
+    @property
+    def test_seeds(self) -> tuple[int, ...]:
+        """Return the held-out test batch, disjoint from every other seed set.
+
+        Empty when the test bank is disabled. Placed after the monitoring
+        batch so enabling it never shifts training, validation or monitoring
+        seeds, keeping older runs bit-for-bit reproducible.
+        """
+
+        if self.test_episodes <= 0:
+            return ()
+        start = (
+            self.seed
+            + self.generations * self.episodes_per_individual
+            + self.validation_episodes
+            + self.monitoring_episodes
+        )
+        return tuple(start + offset for offset in range(self.test_episodes))
+
+    @property
+    def effective_test_max_pieces(self) -> int:
+        """Horizon used for the held-out test bank (validation horizon by default)."""
+
+        return self.test_max_pieces or self.validation_max_pieces
 
     @property
     def effective_elite_archive_capacity(self) -> int:
@@ -197,6 +234,13 @@ class GenerationStats:
     elite_reputation: float
     elite_observations: int
     reproduction_mutation_stddev: float | None
+    # Mean pairwise cosine distance across the generation's population on the
+    # unit sphere (0 = collapsed/identical, higher = spread out). Read together
+    # with the fixed-seed monitoring curve this distinguishes a genuinely flat
+    # fitness landscape (diverse population, equal fitness) from premature
+    # convergence (population collapsed). Trailing default keeps hand-built
+    # GenerationStats in older fixtures valid.
+    population_diversity: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -205,6 +249,8 @@ class TrainingResult:
     best: FitnessEvaluation
     history: tuple[GenerationStats, ...]
     validation_candidate_count: int
+    # Unbiased score of ``best`` on the held-out test bank; None when disabled.
+    test_evaluation: FitnessEvaluation | None = None
 
     def as_dict(self) -> dict[str, object]:
         training_environment = TetrisConfig(max_pieces=self.config.max_pieces)
@@ -212,7 +258,7 @@ class TrainingResult:
             max_pieces=self.config.validation_max_pieces
         )
         return {
-            "schema_version": 5,
+            "schema_version": 6,
             "agent": "GeneticAgent",
             "policy": "normalized_linear_beam_search",
             "policy_config": asdict(self.config.policy_config),
@@ -249,6 +295,33 @@ class TrainingResult:
             "validation_seeds": list(self.config.validation_seeds),
             "monitoring_seeds": list(self.config.monitoring_seeds),
             "validation_candidate_count": self.validation_candidate_count,
+            # Held-out test bank: an unbiased score of the selected model, never
+            # used for selection. Null when the test bank is disabled.
+            "test_seeds": list(self.config.test_seeds),
+            "test_max_pieces": (
+                self.config.effective_test_max_pieces
+                if self.config.test_seeds
+                else None
+            ),
+            "test_selection_role": "held_out_unbiased_estimate_not_used_for_selection",
+            "test_task_return": (
+                self.test_evaluation.fitness if self.test_evaluation else None
+            ),
+            "test_task_return_stddev": (
+                self.test_evaluation.task_return_stddev if self.test_evaluation else None
+            ),
+            "test_mean_score": (
+                self.test_evaluation.mean_score if self.test_evaluation else None
+            ),
+            "test_mean_lines": (
+                self.test_evaluation.mean_lines if self.test_evaluation else None
+            ),
+            "test_mean_pieces": (
+                self.test_evaluation.mean_pieces if self.test_evaluation else None
+            ),
+            "test_episode_count": (
+                len(self.test_evaluation.episode_seeds) if self.test_evaluation else 0
+            ),
             # Compatibility keys refer to the held-out environment that
             # produced best_fitness and the serialized final chromosome.
             "environment_config_id": validation_environment.fingerprint,
@@ -399,6 +472,7 @@ class GeneticTrainer:
                 elite_reputation=elite.reputation,
                 elite_observations=elite.observations,
                 reproduction_mutation_stddev=mutation_stddev,
+                population_diversity=self._population_diversity(population),
             )
             history.append(stats)
             if progress is not None:
@@ -425,11 +499,23 @@ class GeneticTrainer:
             executor=executor,
         )
         best_validated = max(validation_results, key=lambda item: item.fitness)
+        # Score the SELECTED model once on the held-out test bank. This runs
+        # after selection and never feeds back into it, so it is an unbiased
+        # estimate rather than the optimistic max-over-candidates value.
+        test_evaluation: FitnessEvaluation | None = None
+        if self.config.test_seeds:
+            test_evaluation = self._evaluate_chromosomes(
+                (best_validated.chromosome,),
+                self.config.test_seeds,
+                max_pieces=self.config.effective_test_max_pieces,
+                executor=executor,
+            )[0]
         return TrainingResult(
             self.config,
             best_validated,
             tuple(history),
             len(validation_candidates),
+            test_evaluation=test_evaluation,
         )
 
     def evaluate(
@@ -692,6 +778,29 @@ class GeneticTrainer:
         if norm <= 1e-12:
             raise ValueError("Genetic operation produced a zero-length chromosome.")
         return LinearChromosome(tuple(gene / norm for gene in genes))
+
+    @staticmethod
+    def _population_diversity(
+        chromosomes: Sequence[LinearChromosome],
+    ) -> float:
+        """Mean pairwise cosine distance of the population on the unit sphere.
+
+        Chromosomes are unit-normalized, so the cosine similarity of a pair is
+        their dot product and the distance is ``1 - dot`` (0 identical, up to 2
+        antipodal). Returns 0.0 for fewer than two members.
+        """
+
+        members = [chromosome.genes for chromosome in chromosomes]
+        if len(members) < 2:
+            return 0.0
+        total = 0.0
+        pairs = 0
+        for first_index, first in enumerate(members):
+            for second in members[first_index + 1:]:
+                dot = sum(a * b for a, b in zip(first, second, strict=True))
+                total += 1.0 - dot
+                pairs += 1
+        return total / pairs
 
     @staticmethod
     def _unique_chromosomes(

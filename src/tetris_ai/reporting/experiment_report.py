@@ -321,6 +321,26 @@ def write_genetic_training_report(
             "monitoring_seeds": list(result.config.monitoring_seeds),
             "monitoring_role": "diagnostic_only_not_used_for_selection",
             "validation_seeds": list(result.config.validation_seeds),
+            # Horizon-normalized signals that separate policies which look
+            # identical on raw task_return, and expose clearing STYLE.
+            "validation_discrimination": _discrimination_metrics(
+                result.best.fitness,
+                result.best.mean_score,
+                result.best.mean_lines,
+                result.best.mean_pieces,
+            ),
+            # Unbiased estimate on seeds never used for selection (or None).
+            "test_evaluation": _test_evaluation_summary(result),
+            # Convergence read from the fixed-seed monitoring curve, not the
+            # rotating-seed best_fitness curve (which is not comparable across
+            # generations), plus population diversity to tell a flat landscape
+            # from premature convergence.
+            "convergence": _convergence_summary(result.history),
+            "selection_integrity_note": (
+                "best_fitness is a max over validation candidates and is "
+                "optimistically biased; prefer test_evaluation for an unbiased "
+                "estimate and for cross-configuration ranking."
+            ),
         }
         _atomic_write_json(staging / "summary.json", summary)
         _write_genetic_training_charts(result.history, staging / "training")
@@ -517,6 +537,104 @@ def save_genetic_history(history: Sequence[object], destination: str | Path) -> 
         )
         rows.append(row)
     return _write_rows_csv(Path(destination), rows, [*metric_fields, *gene_fields])
+
+
+def _safe_ratio(numerator: float, denominator: float) -> float | None:
+    return numerator / denominator if denominator else None
+
+
+def _discrimination_metrics(
+    task_return: float,
+    mean_score: float,
+    mean_lines: float,
+    mean_pieces: float,
+) -> dict[str, float | None]:
+    """Horizon-normalized efficiency and clearing-style signals.
+
+    ``reward_per_piece`` removes the horizon-length confound that makes
+    long-horizon task_return look flat across competent policies;
+    ``score_per_line`` exposes clearing STYLE (≈100 for singles, up to ≈300 for
+    back-to-back tetrises) that raw line counts hide.
+    """
+
+    return {
+        "reward_per_piece": _safe_ratio(task_return, mean_pieces),
+        "lines_per_piece": _safe_ratio(mean_lines, mean_pieces),
+        "score_per_line": _safe_ratio(mean_score, mean_lines),
+        "score_per_piece": _safe_ratio(mean_score, mean_pieces),
+    }
+
+
+def _test_evaluation_summary(result: object) -> dict[str, object] | None:
+    """Summarize the held-out test bank score of the selected model, if any."""
+
+    test = getattr(result, "test_evaluation", None)
+    if test is None:
+        return None
+    count = len(test.episode_seeds)
+    low, high = _confidence_interval_from_summary(
+        test.fitness, test.task_return_stddev, count
+    )
+    return {
+        "role": "held_out_unbiased_estimate_not_used_for_selection",
+        "episode_count": count,
+        "seeds": list(test.episode_seeds),
+        "max_pieces": result.config.effective_test_max_pieces,
+        "task_return_mean": test.fitness,
+        "task_return_stddev": test.task_return_stddev,
+        "task_return_confidence_interval_95": (
+            {"level": 0.95, "method": "student_t", "low": low, "high": high}
+            if low is not None and high is not None
+            else None
+        ),
+        "mean_score": test.mean_score,
+        "mean_lines": test.mean_lines,
+        "mean_pieces": test.mean_pieces,
+        "discrimination": _discrimination_metrics(
+            test.fitness, test.mean_score, test.mean_lines, test.mean_pieces
+        ),
+    }
+
+
+def _convergence_summary(history: Sequence[object]) -> dict[str, object]:
+    """Summarize convergence from the fixed-seed monitoring curve.
+
+    The per-generation ``best_fitness`` uses ROTATING seeds and is not
+    comparable across generations; the monitoring curve (fixed seeds) is. This
+    reports the first generation whose monitoring fitness reaches within 1% of
+    the run's best, plus population diversity, so a flat-but-diverse plateau
+    (landscape genuinely flat) is distinguishable from a collapsed one
+    (premature convergence).
+    """
+
+    monitoring = [float(stats.monitoring_fitness) for stats in history]
+    diversity = [
+        float(getattr(stats, "population_diversity", 0.0)) for stats in history
+    ]
+    if not monitoring:
+        return {}
+    best = max(monitoring)
+    threshold = best - abs(best) * 0.01
+    plateau_generation = next(
+        (index for index, value in enumerate(monitoring) if value >= threshold),
+        len(monitoring) - 1,
+    )
+    return {
+        "signal": "fixed_seed_monitoring_fitness",
+        "generations": len(monitoring),
+        "monitoring_best": best,
+        "monitoring_final": monitoring[-1],
+        "plateau_generation_within_1pct": plateau_generation,
+        "diversity_first": diversity[0] if diversity else None,
+        "diversity_final": diversity[-1] if diversity else None,
+        "diversity_at_plateau": diversity[plateau_generation] if diversity else None,
+        "interpretation_hint": (
+            "high diversity at an early plateau suggests a flat fitness "
+            "landscape (more population/generations will not help); low "
+            "diversity suggests premature convergence (raise mutation or "
+            "population)."
+        ),
+    }
 
 
 def _evaluation_summary(
