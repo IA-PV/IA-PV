@@ -1,2 +1,8 @@
 -e .
-pytest>=8
+
+# Runtime dependencies (mirrors pyproject.toml [project.dependencies])
+numpy>=2.5.1
+matplotlib>=3.11.1
+
+# Dev/test dependencies (mirrors pyproject.toml [project.optional-dependencies].dev)
+pytest>=9.1.1
