@@ -385,10 +385,10 @@ def load_genetic_model(
     schema_version = payload.get("schema_version", 1)
     if not isinstance(schema_version, int):
         raise ValueError("Genetic model 'schema_version' must be an integer.")
-    if schema_version not in (1, 2, 3, 4, 5):
+    if schema_version not in (1, 2, 3, 4, 5, 6):
         raise ValueError(
             "Unsupported genetic model schema_version "
-            f"{schema_version}; expected 1, 2, 3, 4, or 5."
+            f"{schema_version}; expected 1, 2, 3, 4, 5, or 6."
         )
 
     raw_fitness_metric = payload.get("fitness_metric")

@@ -64,6 +64,22 @@ def main() -> None:
         help="Canonical horizon used to rerank held-out final candidates.",
     )
     parser.add_argument(
+        "--test-episodes",
+        type=int,
+        default=24,
+        help=(
+            "Held-out TEST episodes used ONCE to score the already-selected "
+            "model. Never used for selection, so it yields an unbiased estimate "
+            "free of winner's-curse optimism. 0 disables it."
+        ),
+    )
+    parser.add_argument(
+        "--test-max-pieces",
+        type=int,
+        default=0,
+        help="Horizon for the held-out test bank; 0 reuses --validation-max-pieces.",
+    )
+    parser.add_argument(
         "--elite-count",
         type=int,
         default=defaults.elite_count,
@@ -194,6 +210,8 @@ def main() -> None:
             validation_episodes=args.validation_episodes,
             max_pieces=args.max_pieces,
             validation_max_pieces=args.validation_max_pieces,
+            test_episodes=args.test_episodes,
+            test_max_pieces=args.test_max_pieces,
             elite_count=args.elite_count,
             elite_archive_capacity=args.elite_archive_capacity,
             elite_memory_alpha=args.elite_memory_alpha,
@@ -239,8 +257,26 @@ def main() -> None:
 
     print(
         f"Best validation task return: {result.best.fitness:.4f} "
-        f"+/- {result.best.task_return_stddev:.4f}"
+        f"+/- {result.best.task_return_stddev:.4f} "
+        f"(selection metric; optimistic max over "
+        f"{result.validation_candidate_count} candidates)"
     )
+    if result.test_evaluation is not None:
+        test = result.test_evaluation
+        print(
+            f"Held-out TEST task return: {test.fitness:.4f} "
+            f"+/- {test.task_return_stddev:.4f} "
+            f"({len(test.episode_seeds)} seeds @ "
+            f"{config.effective_test_max_pieces} pieces; unbiased) "
+            f"| reward/piece={test.fitness / test.mean_pieces:.4f} "
+            f"| score/line="
+            f"{(test.mean_score / test.mean_lines) if test.mean_lines else 0.0:.2f}"
+        )
+    else:
+        print(
+            "Held-out TEST: disabled (--test-episodes 0); "
+            "reported best is the optimistic selection metric."
+        )
     print(f"Chromosome: {result.best.chromosome.as_dict()}")
     print(f"Saved training report with run_id={reports.run_id} to {report_directory}")
     print(f"Model: {model_path}")

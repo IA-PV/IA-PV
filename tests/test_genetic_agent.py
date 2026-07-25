@@ -328,6 +328,94 @@ def test_training_is_reproducible_with_rotating_and_validation_seeds() -> None:
     assert norm == pytest.approx(1.0)
 
 
+def test_held_out_test_bank_is_disjoint_and_scores_the_selected_model() -> None:
+    config = GeneticAlgorithmConfig(
+        population_size=4,
+        generations=3,
+        episodes_per_individual=2,
+        monitoring_episodes=2,
+        validation_episodes=3,
+        test_episodes=4,
+        test_max_pieces=7,
+        max_pieces=5,
+        validation_max_pieces=5,
+        elite_count=1,
+        tournament_size=2,
+        lookahead_depth=1,
+        seed=11,
+    )
+    training = {
+        seed
+        for generation in range(config.generations)
+        for seed in config.training_seeds(generation)
+    }
+    # Placed strictly after the monitoring batch and disjoint from everything.
+    assert config.test_seeds == (22, 23, 24, 25)
+    assert training.isdisjoint(config.test_seeds)
+    assert set(config.validation_seeds).isdisjoint(config.test_seeds)
+    assert set(config.monitoring_seeds).isdisjoint(config.test_seeds)
+    assert config.effective_test_max_pieces == 7
+
+    result = GeneticTrainer(config).train()
+
+    assert result.test_evaluation is not None
+    # The test bank scores exactly the selected model, on the test seeds only,
+    # and is never consulted for selection.
+    assert result.test_evaluation.chromosome == result.best.chromosome
+    assert result.test_evaluation.episode_seeds == config.test_seeds
+
+
+def test_enabling_the_test_bank_does_not_shift_other_seed_sets() -> None:
+    common = dict(
+        population_size=4,
+        generations=2,
+        episodes_per_individual=1,
+        monitoring_episodes=1,
+        validation_episodes=1,
+        max_pieces=1,
+        validation_max_pieces=1,
+        elite_count=1,
+        tournament_size=2,
+        lookahead_depth=1,
+        seed=3,
+    )
+    without = GeneticAlgorithmConfig(**common)
+    with_bank = GeneticAlgorithmConfig(**common, test_episodes=5)
+
+    assert without.test_seeds == ()
+    assert without.effective_test_max_pieces == without.validation_max_pieces
+    assert without.validation_seeds == with_bank.validation_seeds
+    assert without.monitoring_seeds == with_bank.monitoring_seeds
+    # A disabled bank keeps the previous behaviour byte-for-byte.
+    assert GeneticTrainer(without).train().test_evaluation is None
+
+
+def test_population_diversity_is_recorded_and_bounded() -> None:
+    config = GeneticAlgorithmConfig(
+        population_size=6,
+        generations=3,
+        episodes_per_individual=1,
+        monitoring_episodes=1,
+        validation_episodes=1,
+        max_pieces=3,
+        validation_max_pieces=3,
+        elite_count=1,
+        tournament_size=2,
+        lookahead_depth=1,
+        seed=5,
+    )
+
+    result = GeneticTrainer(config).train()
+
+    assert len(result.history) == config.generations
+    for stats in result.history:
+        assert 0.0 <= stats.population_diversity <= 2.0
+    # Identical unit vectors have zero pairwise cosine distance; a singleton too.
+    identical = _chromosome()
+    assert GeneticTrainer._population_diversity([identical] * 3) == 0.0
+    assert GeneticTrainer._population_diversity([identical]) == 0.0
+
+
 def test_monitoring_episode_count_does_not_change_evolution_or_selection() -> None:
     common = {
         "population_size": 4,
@@ -444,7 +532,10 @@ def test_training_artifact_round_trip(tmp_path: Path) -> None:
 
     payload = json.loads(destination.read_text(encoding="utf-8"))
 
-    assert payload["schema_version"] == 5
+    assert payload["schema_version"] == 6
+    # The default config disables the held-out test bank, so its fields are null.
+    assert payload["test_seeds"] == []
+    assert payload["test_task_return"] is None
     assert payload["fitness"] == "mean_task_return"
     assert payload["fitness_metric"] == "task_return"
     assert payload["fitness_shaping_included"] is False
