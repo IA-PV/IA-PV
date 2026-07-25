@@ -1,0 +1,107 @@
+{
+  "agent": "DQNAgent",
+  "episode_count": 250,
+  "episodes_completed": 250,
+  "final_epsilon": 0.01,
+  "last_loss": 0.13736668229103088,
+  "learn_steps": 52782,
+  "metrics": {
+    "lines_removed": {
+      "confidence_interval_95": {
+        "high": 86.5078565911878,
+        "level": 0.95,
+        "low": 73.34014340881221,
+        "method": "student_t"
+      },
+      "count": 250,
+      "max": 120.0,
+      "mean": 79.924,
+      "median": 117.0,
+      "min": 0.0,
+      "sample_stddev": 53.11220055118746,
+      "standard_error": 3.359110505708056
+    },
+    "pieces_placed": {
+      "confidence_interval_95": {
+        "high": 229.9965808144303,
+        "level": 0.95,
+        "low": 200.2514191855697,
+        "method": "student_t"
+      },
+      "count": 250,
+      "max": 300.0,
+      "mean": 215.124,
+      "median": 300.0,
+      "min": 21.0,
+      "sample_stddev": 119.97762770031076,
+      "standard_error": 7.588051435933833
+    },
+    "score": {
+      "confidence_interval_95": {
+        "high": 77837.87970722416,
+        "level": 0.95,
+        "low": 65161.32029277586,
+        "method": "student_t"
+      },
+      "count": 250,
+      "max": 123700.0,
+      "mean": 71499.6,
+      "median": 100500.0,
+      "min": 0.0,
+      "sample_stddev": 51131.12327054463,
+      "standard_error": 3233.8161771551772
+    },
+    "task_return": {
+      "confidence_interval_95": {
+        "high": 123.9388708899616,
+        "level": 0.95,
+        "low": 104.52512911003839,
+        "method": "student_t"
+      },
+      "count": 250,
+      "max": 193.0,
+      "mean": 114.232,
+      "median": 158.0,
+      "min": 0.0,
+      "sample_stddev": 78.30566572822532,
+      "standard_error": 4.952485147939592
+    },
+    "total_reward": {
+      "confidence_interval_95": {
+        "high": 123.93887088996155,
+        "level": 0.95,
+        "low": 104.52512911003836,
+        "method": "student_t"
+      },
+      "count": 250,
+      "max": 192.9999999999999,
+      "mean": 114.23199999999996,
+      "median": 157.99999999999994,
+      "min": -1.4210854715202004e-14,
+      "sample_stddev": 78.30566572822529,
+      "standard_error": 4.952485147939591
+    }
+  },
+  "outcomes": {
+    "game_over": {
+      "count": 85,
+      "rate": 0.34
+    },
+    "horizon_completed": {
+      "count": 165,
+      "rate": 0.66
+    },
+    "truncated": {
+      "count": 0,
+      "rate": 0.0
+    }
+  },
+  "primary_metric": "task_return",
+  "rates": {
+    "game_over": 0.34,
+    "horizon_completed": 0.66,
+    "truncated": 0.0
+  },
+  "replay_size": 20000,
+  "transitions_observed": 53781
+}
