@@ -1,0 +1,242 @@
+{
+  "agent": "QTableAgent",
+  "environment_config_ids": [
+    "31a31b91b5ad163c"
+  ],
+  "episode_count": 12,
+  "metrics": {
+    "avg_nodes_per_decision": {
+      "confidence_interval_95": {
+        "high": 0.0,
+        "level": 0.95,
+        "low": 0.0,
+        "method": "student_t"
+      },
+      "count": 12,
+      "max": 0.0,
+      "mean": 0.0,
+      "median": 0.0,
+      "min": 0.0,
+      "sample_stddev": 0.0,
+      "standard_error": 0.0
+    },
+    "decisions_made": {
+      "confidence_interval_95": {
+        "high": 29.105789876014963,
+        "level": 0.95,
+        "low": 23.0608767906517,
+        "method": "student_t"
+      },
+      "count": 12,
+      "max": 33.0,
+      "mean": 26.083333333333332,
+      "median": 26.0,
+      "min": 17.0,
+      "sample_stddev": 4.756972553924174,
+      "standard_error": 1.3732196922678919
+    },
+    "lines_removed": {
+      "confidence_interval_95": {
+        "high": 0.8414509694770947,
+        "level": 0.95,
+        "low": -0.008117636143761375,
+        "method": "student_t"
+      },
+      "count": 12,
+      "max": 2.0,
+      "mean": 0.4166666666666667,
+      "median": 0.0,
+      "min": 0.0,
+      "sample_stddev": 0.6685579234215214,
+      "standard_error": 0.19299604852813632
+    },
+    "max_nodes_single_decision": {
+      "confidence_interval_95": {
+        "high": 0.0,
+        "level": 0.95,
+        "low": 0.0,
+        "method": "student_t"
+      },
+      "count": 12,
+      "max": 0.0,
+      "mean": 0.0,
+      "median": 0.0,
+      "min": 0.0,
+      "sample_stddev": 0.0,
+      "standard_error": 0.0
+    },
+    "mean_decision_time_ms": {
+      "confidence_interval_95": {
+        "high": 0.17109720339133208,
+        "level": 0.95,
+        "low": 0.09022036823329718,
+        "method": "student_t"
+      },
+      "count": 12,
+      "max": 0.305980967823416,
+      "mean": 0.13065878581231463,
+      "median": 0.1067231558771044,
+      "min": 0.08678172412930571,
+      "sample_stddev": 0.06364506481103556,
+      "standard_error": 0.01837274765062128
+    },
+    "nodes_expanded": {
+      "confidence_interval_95": {
+        "high": 993.1446906789367,
+        "level": 0.95,
+        "low": 746.1886426543965,
+        "method": "student_t"
+      },
+      "count": 12,
+      "max": 1131.0,
+      "mean": 869.6666666666666,
+      "median": 932.5,
+      "min": 515.0,
+      "sample_stddev": 194.33912876643492,
+      "standard_error": 56.100874153689276
+    },
+    "p50_decision_time_ms": {
+      "confidence_interval_95": {
+        "high": 0.09091910085916702,
+        "level": 0.95,
+        "low": 0.08314206456974743,
+        "method": "student_t"
+      },
+      "count": 12,
+      "max": 0.09433599916519597,
+      "mean": 0.08703058271445722,
+      "median": 0.08864249684847891,
+      "min": 0.07063199882395566,
+      "sample_stddev": 0.006120046336020738,
+      "standard_error": 0.001766705199777278
+    },
+    "p95_decision_time_ms": {
+      "confidence_interval_95": {
+        "high": 0.44463345860909287,
+        "level": 0.95,
+        "low": 0.11509319091999395,
+        "method": "student_t"
+      },
+      "count": 12,
+      "max": 1.0337815001548734,
+      "mean": 0.2798633247645434,
+      "median": 0.169370472576702,
+      "min": 0.11749860277632251,
+      "sample_stddev": 0.2593277995353783,
+      "standard_error": 0.074861487435052
+    },
+    "pieces_placed": {
+      "confidence_interval_95": {
+        "high": 29.105789876014963,
+        "level": 0.95,
+        "low": 23.0608767906517,
+        "method": "student_t"
+      },
+      "count": 12,
+      "max": 33.0,
+      "mean": 26.083333333333332,
+      "median": 26.0,
+      "min": 17.0,
+      "sample_stddev": 4.756972553924174,
+      "standard_error": 1.3732196922678919
+    },
+    "score": {
+      "confidence_interval_95": {
+        "high": 84.14509694770946,
+        "level": 0.95,
+        "low": -0.8117636143761331,
+        "method": "student_t"
+      },
+      "count": 12,
+      "max": 200.0,
+      "mean": 41.666666666666664,
+      "median": 0.0,
+      "min": 0.0,
+      "sample_stddev": 66.85579234215214,
+      "standard_error": 19.29960485281363
+    },
+    "task_return": {
+      "confidence_interval_95": {
+        "high": 0.8414509694770947,
+        "level": 0.95,
+        "low": -0.008117636143761375,
+        "method": "student_t"
+      },
+      "count": 12,
+      "max": 2.0,
+      "mean": 0.4166666666666667,
+      "median": 0.0,
+      "min": 0.0,
+      "sample_stddev": 0.6685579234215214,
+      "standard_error": 0.19299604852813632
+    },
+    "total_decision_time_seconds": {
+      "confidence_interval_95": {
+        "high": 0.004719367845600306,
+        "level": 0.95,
+        "low": 0.002137269003175752,
+        "method": "student_t"
+      },
+      "count": 12,
+      "max": 0.009485410002525896,
+      "mean": 0.003428318424388029,
+      "median": 0.0028537380203488283,
+      "min": 0.0020481890096561983,
+      "sample_stddev": 0.0020319520151040947,
+      "standard_error": 0.0005865740214503758
+    },
+    "total_reward": {
+      "confidence_interval_95": {
+        "high": 0.8414509694770947,
+        "level": 0.95,
+        "low": -0.008117636143761375,
+        "method": "student_t"
+      },
+      "count": 12,
+      "max": 2.0,
+      "mean": 0.4166666666666667,
+      "median": 0.0,
+      "min": 0.0,
+      "sample_stddev": 0.6685579234215214,
+      "standard_error": 0.19299604852813632
+    }
+  },
+  "outcomes": {
+    "game_over": {
+      "count": 12,
+      "rate": 1.0
+    },
+    "horizon_completed": {
+      "count": 0,
+      "rate": 0.0
+    },
+    "truncated": {
+      "count": 0,
+      "rate": 0.0
+    }
+  },
+  "policy_ids": [],
+  "primary_metric": "task_return",
+  "rates": {
+    "game_over": 1.0,
+    "horizon_completed": 0.0,
+    "truncated": 0.0
+  },
+  "seeds": [
+    1000000,
+    1000001,
+    1000002,
+    1000003,
+    1000004,
+    1000005,
+    1000006,
+    1000007,
+    1000008,
+    1000009,
+    1000010,
+    1000011
+  ],
+  "termination_reasons": {
+    "game_over": 12
+  }
+}

@@ -1,0 +1,200 @@
+{
+  "agent": "GeneticAgent",
+  "agent_configurations": [
+    {
+      "chromosome": {
+        "aggregate_height": 0.002623601279711718,
+        "bumpiness": 0.03435924928556355,
+        "column_transitions": -0.26761246641106684,
+        "hold_retrieve_i": -0.28377737743836456,
+        "hold_store_i": 0.12682178332385638,
+        "holes": -0.6625814815888602,
+        "i_well_match": -0.18335233179261778,
+        "landing_height": -0.00017587506728423982,
+        "lines_cleared": 0.28771533154891105,
+        "max_height": -0.3260662924940819,
+        "row_transitions": -0.28628457736029933,
+        "use_hold": -0.2705716282668272,
+        "wells": 0.1169753360252587
+      },
+      "chromosome_id": "93646f0c20cceb9f",
+      "policy": "normalized_linear_beam_search",
+      "policy_config": {
+        "beam_width": 2,
+        "discount_factor": 0.95,
+        "search_depth": 2
+      }
+    }
+  ],
+  "artifacts": {
+    "episodes.csv": {
+      "sha256": "ea83ed4826ec53abf7b0560f774125b97e602b6a41a525027ac1ee76e2ddeaf1",
+      "size_bytes": 3214
+    },
+    "metrics.png": {
+      "sha256": "c91939ed9671b6169ef9e907f826ceba988205ecb9cf0607862ccdc29eeecb98",
+      "size_bytes": 738398
+    },
+    "metrics.svg": {
+      "sha256": "2111a90c73fe8708102b44afdede5344fe4ecae5adbcc5c09e6ac004c5b9111a",
+      "size_bytes": 71426
+    },
+    "summary.json": {
+      "sha256": "dcc59a6af818b16b947f886049e05342e598751701c5803d1b378c0678bb61e6",
+      "size_bytes": 5900
+    }
+  },
+  "command": [
+    "/home/vitor/github/personal/IA-PV/src/tetris_ai/cli/evaluate_agents.py",
+    "--agents",
+    "state-goal",
+    "genetic",
+    "q-table",
+    "dqn",
+    "--genetic-model",
+    "reports/genetic_agent/20260724T210834.353261-0300/model.json",
+    "--q-table-checkpoint",
+    "reports/q_table_agent/20260724T212622.843743-0300/checkpoint.pkl",
+    "--dqn-checkpoint",
+    "reports/dqn_agent/20260724T221509.615980-0300/checkpoint.pkl",
+    "--episodes",
+    "12",
+    "--max-pieces",
+    "300",
+    "--seed",
+    "1000000",
+    "--search-depth",
+    "2",
+    "--max-nodes-expanded",
+    "500",
+    "--workers",
+    "0"
+  ],
+  "completed_at": "2026-07-24T22:56:17.116746-03:00",
+  "duration_seconds": 154.18526,
+  "experiment": {
+    "agents": [
+      "state-goal",
+      "genetic",
+      "q-table",
+      "dqn"
+    ],
+    "allow_horizon_transfer": false,
+    "beam_width": null,
+    "environment_config": {
+      "allow_hold": true,
+      "height": 20,
+      "horizon_mode": "finite",
+      "max_pieces": 300,
+      "observation_mode": "featured",
+      "preview_count": 5,
+      "reward": {
+        "aggregate_height_delta_weight": 0.0,
+        "bumpiness_delta_weight": 0.0,
+        "enable_shaping": false,
+        "holes_delta_weight": 0.0,
+        "line_rewards": [
+          0.0,
+          1.0,
+          3.0,
+          5.0,
+          8.0
+        ],
+        "shaping_gamma": 1.0,
+        "shaping_scale": 1.0,
+        "terminal_penalty": 0.0,
+        "truncation_penalty": 0.0
+      },
+      "ruleset_version": "planning-v2",
+      "scoring": {
+        "approximate_t_spin_scores": [
+          400,
+          800,
+          1200,
+          1600,
+          1600
+        ],
+        "back_to_back_multiplier": 1.5,
+        "enable_approximate_t_spins": false,
+        "line_clear_scores": [
+          0,
+          100,
+          300,
+          500,
+          800
+        ]
+      },
+      "width": 10
+    },
+    "environment_config_id": "31a31b91b5ad163c",
+    "episodes": 12,
+    "first_seed": 1000000,
+    "max_nodes_expanded": 500,
+    "search_depth": 2,
+    "search_strategy": "greedy",
+    "seeds": [
+      1000000,
+      1000001,
+      1000002,
+      1000003,
+      1000004,
+      1000005,
+      1000006,
+      1000007,
+      1000008,
+      1000009,
+      1000010,
+      1000011
+    ],
+    "worker_processes": 7,
+    "workers_requested": 0
+  },
+  "measurement_contract": {
+    "decision_clock": "time.perf_counter",
+    "decision_quantile_method": "linear_interpolation_at_(n_minus_1)_times_q",
+    "decision_time_scope": "agent.select_action_only",
+    "primary_metric": "task_return",
+    "task_return_includes_shaping": false
+  },
+  "report_type": "agent_evaluation",
+  "run_id": "20260724T225342.931486-0300",
+  "runtime": {
+    "package_version": "not-installed",
+    "platform": {
+      "machine": "x86_64",
+      "release": "7.0.10-arch1-1",
+      "system": "Linux"
+    },
+    "python": {
+      "implementation": "CPython",
+      "version": "3.14.6"
+    },
+    "source_control": {
+      "commit": "519f4e4c9dcc65e9daf800cd9adf421306debed6",
+      "repository_root": "/home/vitor/github/personal/IA-PV",
+      "working_tree_dirty": true
+    },
+    "working_directory": "/home/vitor/github/personal/IA-PV"
+  },
+  "schema_version": 3,
+  "source_artifacts": [
+    {
+      "path": "/home/vitor/github/personal/IA-PV/reports/genetic_agent/20260724T210834.353261-0300/model.json",
+      "sha256": "870183cdaaea0ea93ed091017fea43fd246dcb2d399cbea8fcfec9972766f30e",
+      "size_bytes": 18733
+    }
+  ],
+  "started_at": "2026-07-24T22:53:42.931486-03:00",
+  "visualization": {
+    "backend": "Agg",
+    "formats": [
+      "svg",
+      "png"
+    ],
+    "library": "matplotlib",
+    "png_dpi": 300,
+    "raw_observations_visible": true,
+    "uncertainty": "two_sided_95_percent_student_t_confidence_interval",
+    "version": "3.11.0"
+  }
+}

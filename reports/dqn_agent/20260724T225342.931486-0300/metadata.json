@@ -1,0 +1,464 @@
+{
+  "agent": "DQNAgent",
+  "agent_configurations": [
+    {
+      "algorithm": "afterstate_value_dqn",
+      "batch_size": 64,
+      "board_height": 20,
+      "board_width": 10,
+      "epsilon_decay": 0.9995,
+      "epsilon_min": 0.01,
+      "epsilon_start": 1.0,
+      "feature_dim": 5,
+      "framework": "numpy_mlp",
+      "gamma": 0.99,
+      "hidden_sizes": [
+        64,
+        64
+      ],
+      "learning_rate": 0.001,
+      "learning_starts": 1000,
+      "max_pieces": 300,
+      "replay_capacity": 20000,
+      "seed": 1000000,
+      "source_max_pieces": 300,
+      "target_update_frequency": 500,
+      "train_frequency": 1
+    },
+    {
+      "algorithm": "afterstate_value_dqn",
+      "batch_size": 64,
+      "board_height": 20,
+      "board_width": 10,
+      "epsilon_decay": 0.9995,
+      "epsilon_min": 0.01,
+      "epsilon_start": 1.0,
+      "feature_dim": 5,
+      "framework": "numpy_mlp",
+      "gamma": 0.99,
+      "hidden_sizes": [
+        64,
+        64
+      ],
+      "learning_rate": 0.001,
+      "learning_starts": 1000,
+      "max_pieces": 300,
+      "replay_capacity": 20000,
+      "seed": 1000001,
+      "source_max_pieces": 300,
+      "target_update_frequency": 500,
+      "train_frequency": 1
+    },
+    {
+      "algorithm": "afterstate_value_dqn",
+      "batch_size": 64,
+      "board_height": 20,
+      "board_width": 10,
+      "epsilon_decay": 0.9995,
+      "epsilon_min": 0.01,
+      "epsilon_start": 1.0,
+      "feature_dim": 5,
+      "framework": "numpy_mlp",
+      "gamma": 0.99,
+      "hidden_sizes": [
+        64,
+        64
+      ],
+      "learning_rate": 0.001,
+      "learning_starts": 1000,
+      "max_pieces": 300,
+      "replay_capacity": 20000,
+      "seed": 1000002,
+      "source_max_pieces": 300,
+      "target_update_frequency": 500,
+      "train_frequency": 1
+    },
+    {
+      "algorithm": "afterstate_value_dqn",
+      "batch_size": 64,
+      "board_height": 20,
+      "board_width": 10,
+      "epsilon_decay": 0.9995,
+      "epsilon_min": 0.01,
+      "epsilon_start": 1.0,
+      "feature_dim": 5,
+      "framework": "numpy_mlp",
+      "gamma": 0.99,
+      "hidden_sizes": [
+        64,
+        64
+      ],
+      "learning_rate": 0.001,
+      "learning_starts": 1000,
+      "max_pieces": 300,
+      "replay_capacity": 20000,
+      "seed": 1000003,
+      "source_max_pieces": 300,
+      "target_update_frequency": 500,
+      "train_frequency": 1
+    },
+    {
+      "algorithm": "afterstate_value_dqn",
+      "batch_size": 64,
+      "board_height": 20,
+      "board_width": 10,
+      "epsilon_decay": 0.9995,
+      "epsilon_min": 0.01,
+      "epsilon_start": 1.0,
+      "feature_dim": 5,
+      "framework": "numpy_mlp",
+      "gamma": 0.99,
+      "hidden_sizes": [
+        64,
+        64
+      ],
+      "learning_rate": 0.001,
+      "learning_starts": 1000,
+      "max_pieces": 300,
+      "replay_capacity": 20000,
+      "seed": 1000004,
+      "source_max_pieces": 300,
+      "target_update_frequency": 500,
+      "train_frequency": 1
+    },
+    {
+      "algorithm": "afterstate_value_dqn",
+      "batch_size": 64,
+      "board_height": 20,
+      "board_width": 10,
+      "epsilon_decay": 0.9995,
+      "epsilon_min": 0.01,
+      "epsilon_start": 1.0,
+      "feature_dim": 5,
+      "framework": "numpy_mlp",
+      "gamma": 0.99,
+      "hidden_sizes": [
+        64,
+        64
+      ],
+      "learning_rate": 0.001,
+      "learning_starts": 1000,
+      "max_pieces": 300,
+      "replay_capacity": 20000,
+      "seed": 1000005,
+      "source_max_pieces": 300,
+      "target_update_frequency": 500,
+      "train_frequency": 1
+    },
+    {
+      "algorithm": "afterstate_value_dqn",
+      "batch_size": 64,
+      "board_height": 20,
+      "board_width": 10,
+      "epsilon_decay": 0.9995,
+      "epsilon_min": 0.01,
+      "epsilon_start": 1.0,
+      "feature_dim": 5,
+      "framework": "numpy_mlp",
+      "gamma": 0.99,
+      "hidden_sizes": [
+        64,
+        64
+      ],
+      "learning_rate": 0.001,
+      "learning_starts": 1000,
+      "max_pieces": 300,
+      "replay_capacity": 20000,
+      "seed": 1000006,
+      "source_max_pieces": 300,
+      "target_update_frequency": 500,
+      "train_frequency": 1
+    },
+    {
+      "algorithm": "afterstate_value_dqn",
+      "batch_size": 64,
+      "board_height": 20,
+      "board_width": 10,
+      "epsilon_decay": 0.9995,
+      "epsilon_min": 0.01,
+      "epsilon_start": 1.0,
+      "feature_dim": 5,
+      "framework": "numpy_mlp",
+      "gamma": 0.99,
+      "hidden_sizes": [
+        64,
+        64
+      ],
+      "learning_rate": 0.001,
+      "learning_starts": 1000,
+      "max_pieces": 300,
+      "replay_capacity": 20000,
+      "seed": 1000007,
+      "source_max_pieces": 300,
+      "target_update_frequency": 500,
+      "train_frequency": 1
+    },
+    {
+      "algorithm": "afterstate_value_dqn",
+      "batch_size": 64,
+      "board_height": 20,
+      "board_width": 10,
+      "epsilon_decay": 0.9995,
+      "epsilon_min": 0.01,
+      "epsilon_start": 1.0,
+      "feature_dim": 5,
+      "framework": "numpy_mlp",
+      "gamma": 0.99,
+      "hidden_sizes": [
+        64,
+        64
+      ],
+      "learning_rate": 0.001,
+      "learning_starts": 1000,
+      "max_pieces": 300,
+      "replay_capacity": 20000,
+      "seed": 1000008,
+      "source_max_pieces": 300,
+      "target_update_frequency": 500,
+      "train_frequency": 1
+    },
+    {
+      "algorithm": "afterstate_value_dqn",
+      "batch_size": 64,
+      "board_height": 20,
+      "board_width": 10,
+      "epsilon_decay": 0.9995,
+      "epsilon_min": 0.01,
+      "epsilon_start": 1.0,
+      "feature_dim": 5,
+      "framework": "numpy_mlp",
+      "gamma": 0.99,
+      "hidden_sizes": [
+        64,
+        64
+      ],
+      "learning_rate": 0.001,
+      "learning_starts": 1000,
+      "max_pieces": 300,
+      "replay_capacity": 20000,
+      "seed": 1000009,
+      "source_max_pieces": 300,
+      "target_update_frequency": 500,
+      "train_frequency": 1
+    },
+    {
+      "algorithm": "afterstate_value_dqn",
+      "batch_size": 64,
+      "board_height": 20,
+      "board_width": 10,
+      "epsilon_decay": 0.9995,
+      "epsilon_min": 0.01,
+      "epsilon_start": 1.0,
+      "feature_dim": 5,
+      "framework": "numpy_mlp",
+      "gamma": 0.99,
+      "hidden_sizes": [
+        64,
+        64
+      ],
+      "learning_rate": 0.001,
+      "learning_starts": 1000,
+      "max_pieces": 300,
+      "replay_capacity": 20000,
+      "seed": 1000010,
+      "source_max_pieces": 300,
+      "target_update_frequency": 500,
+      "train_frequency": 1
+    },
+    {
+      "algorithm": "afterstate_value_dqn",
+      "batch_size": 64,
+      "board_height": 20,
+      "board_width": 10,
+      "epsilon_decay": 0.9995,
+      "epsilon_min": 0.01,
+      "epsilon_start": 1.0,
+      "feature_dim": 5,
+      "framework": "numpy_mlp",
+      "gamma": 0.99,
+      "hidden_sizes": [
+        64,
+        64
+      ],
+      "learning_rate": 0.001,
+      "learning_starts": 1000,
+      "max_pieces": 300,
+      "replay_capacity": 20000,
+      "seed": 1000011,
+      "source_max_pieces": 300,
+      "target_update_frequency": 500,
+      "train_frequency": 1
+    }
+  ],
+  "artifacts": {
+    "episodes.csv": {
+      "sha256": "e93af685faaa3e9a77c9d8ffa58461e6034b80af6dadca4f57ebc20e0918f035",
+      "size_bytes": 2806
+    },
+    "metrics.png": {
+      "sha256": "1677e1ab71e46daac7ae1b0ffc1bbb269f99c33f0f088af513a8e1b51883288a",
+      "size_bytes": 590982
+    },
+    "metrics.svg": {
+      "sha256": "2bdf3136684e24bf3602f2f501c34acd6915da2116c906b200906743d44c7bef",
+      "size_bytes": 69475
+    },
+    "summary.json": {
+      "sha256": "6b5eeced59831ee8618ea5e100d79f4c663f3c291ad6f689762f1d12695f3ed7",
+      "size_bytes": 5899
+    }
+  },
+  "command": [
+    "/home/vitor/github/personal/IA-PV/src/tetris_ai/cli/evaluate_agents.py",
+    "--agents",
+    "state-goal",
+    "genetic",
+    "q-table",
+    "dqn",
+    "--genetic-model",
+    "reports/genetic_agent/20260724T210834.353261-0300/model.json",
+    "--q-table-checkpoint",
+    "reports/q_table_agent/20260724T212622.843743-0300/checkpoint.pkl",
+    "--dqn-checkpoint",
+    "reports/dqn_agent/20260724T221509.615980-0300/checkpoint.pkl",
+    "--episodes",
+    "12",
+    "--max-pieces",
+    "300",
+    "--seed",
+    "1000000",
+    "--search-depth",
+    "2",
+    "--max-nodes-expanded",
+    "500",
+    "--workers",
+    "0"
+  ],
+  "completed_at": "2026-07-24T22:56:17.116746-03:00",
+  "duration_seconds": 154.18526,
+  "experiment": {
+    "agents": [
+      "state-goal",
+      "genetic",
+      "q-table",
+      "dqn"
+    ],
+    "allow_horizon_transfer": false,
+    "beam_width": null,
+    "environment_config": {
+      "allow_hold": true,
+      "height": 20,
+      "horizon_mode": "finite",
+      "max_pieces": 300,
+      "observation_mode": "featured",
+      "preview_count": 5,
+      "reward": {
+        "aggregate_height_delta_weight": 0.0,
+        "bumpiness_delta_weight": 0.0,
+        "enable_shaping": false,
+        "holes_delta_weight": 0.0,
+        "line_rewards": [
+          0.0,
+          1.0,
+          3.0,
+          5.0,
+          8.0
+        ],
+        "shaping_gamma": 1.0,
+        "shaping_scale": 1.0,
+        "terminal_penalty": 0.0,
+        "truncation_penalty": 0.0
+      },
+      "ruleset_version": "planning-v2",
+      "scoring": {
+        "approximate_t_spin_scores": [
+          400,
+          800,
+          1200,
+          1600,
+          1600
+        ],
+        "back_to_back_multiplier": 1.5,
+        "enable_approximate_t_spins": false,
+        "line_clear_scores": [
+          0,
+          100,
+          300,
+          500,
+          800
+        ]
+      },
+      "width": 10
+    },
+    "environment_config_id": "31a31b91b5ad163c",
+    "episodes": 12,
+    "first_seed": 1000000,
+    "max_nodes_expanded": 500,
+    "search_depth": 2,
+    "search_strategy": "greedy",
+    "seeds": [
+      1000000,
+      1000001,
+      1000002,
+      1000003,
+      1000004,
+      1000005,
+      1000006,
+      1000007,
+      1000008,
+      1000009,
+      1000010,
+      1000011
+    ],
+    "worker_processes": 7,
+    "workers_requested": 0
+  },
+  "measurement_contract": {
+    "decision_clock": "time.perf_counter",
+    "decision_quantile_method": "linear_interpolation_at_(n_minus_1)_times_q",
+    "decision_time_scope": "agent.select_action_only",
+    "primary_metric": "task_return",
+    "task_return_includes_shaping": false
+  },
+  "report_type": "agent_evaluation",
+  "run_id": "20260724T225342.931486-0300",
+  "runtime": {
+    "package_version": "not-installed",
+    "platform": {
+      "machine": "x86_64",
+      "release": "7.0.10-arch1-1",
+      "system": "Linux"
+    },
+    "python": {
+      "implementation": "CPython",
+      "version": "3.14.6"
+    },
+    "source_control": {
+      "commit": "519f4e4c9dcc65e9daf800cd9adf421306debed6",
+      "repository_root": "/home/vitor/github/personal/IA-PV",
+      "working_tree_dirty": true
+    },
+    "working_directory": "/home/vitor/github/personal/IA-PV"
+  },
+  "schema_version": 3,
+  "source_artifacts": [
+    {
+      "path": "/home/vitor/github/personal/IA-PV/reports/dqn_agent/20260724T221509.615980-0300/checkpoint.pkl",
+      "sha256": "1e86bf948e340a48e06b5ec4f7df1856886a7af529ad49ea93bf08b9aaf5b16a",
+      "size_bytes": 18956
+    }
+  ],
+  "started_at": "2026-07-24T22:53:42.931486-03:00",
+  "visualization": {
+    "backend": "Agg",
+    "formats": [
+      "svg",
+      "png"
+    ],
+    "library": "matplotlib",
+    "png_dpi": 300,
+    "raw_observations_visible": true,
+    "uncertainty": "two_sided_95_percent_student_t_confidence_interval",
+    "version": "3.11.0"
+  }
+}

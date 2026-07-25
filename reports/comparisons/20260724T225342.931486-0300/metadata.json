@@ -1,0 +1,218 @@
+{
+  "agent_reports": {
+    "DQNAgent": "../../dqn_agent/20260724T225342.931486-0300",
+    "GeneticAgent": "../../genetic_agent/20260724T225342.931486-0300",
+    "QTableAgent": "../../q_table_agent/20260724T225342.931486-0300",
+    "StateGoalHeuristicAgent": "../../state_goal_heuristic_agent/20260724T225342.931486-0300"
+  },
+  "agents": [
+    "StateGoalHeuristicAgent",
+    "GeneticAgent",
+    "QTableAgent",
+    "DQNAgent"
+  ],
+  "artifacts": {
+    "comparison.png": {
+      "sha256": "3a5ddc0b54ffe8c3a8885e5dd5b866bea2296692d8e6f79fe0ba58aa7850d8bf",
+      "size_bytes": 798359
+    },
+    "comparison.svg": {
+      "sha256": "b2ab9431f3fae2504d9e618869a903a2ed04b80061ad717962c2061ddfb3da72",
+      "size_bytes": 174616
+    },
+    "episodes.csv": {
+      "sha256": "48836b4031b4d66683295b74bd6569153f94e02b40855ee22f70ff88b146edfb",
+      "size_bytes": 10580
+    },
+    "paired_lines_removed.csv": {
+      "sha256": "48d7c4baeabde490c9b1b4a1976862aa3acac214bd5786078d3dc64a15ad02d5",
+      "size_bytes": 1736
+    },
+    "paired_pieces_placed.csv": {
+      "sha256": "5ec4bcf08b62e25bf738f01e0159628766223e4c8b92839a2881a39f19195b4d",
+      "size_bytes": 1740
+    },
+    "paired_reward.csv": {
+      "sha256": "106fdf8e2517d7e79a393fde053a57744621e1597afb36e0d6d409c01b2883c1",
+      "size_bytes": 1729
+    },
+    "paired_reward.png": {
+      "sha256": "5c6a53be6800d2df7f555eefb204db4870b9a0b0d57b4f010388d30d5eeee6a2",
+      "size_bytes": 593624
+    },
+    "paired_reward.svg": {
+      "sha256": "c30828c83edd51351246c18ea940902cd6526c77175761e613f2073098c49152",
+      "size_bytes": 24186
+    },
+    "paired_score.csv": {
+      "sha256": "312baf197a53c4d79d43ee0dd2d16681a39d603db343f737f12382b8897142a3",
+      "size_bytes": 1697
+    },
+    "paired_task_return.csv": {
+      "sha256": "b6bd69579cea34089fec1de596d2438900f289980782540b17476debb204923b",
+      "size_bytes": 1723
+    },
+    "paired_task_return.png": {
+      "sha256": "a7ae22c59932f4b29dcfc94707dc334b3a2dde1867e007f1da99aeab2ececcb4",
+      "size_bytes": 595562
+    },
+    "paired_task_return.svg": {
+      "sha256": "61f70ffb46c2c5bda6304cb8149b36eccee664eca721a8febc71d3e58b7830f8",
+      "size_bytes": 24200
+    },
+    "summary.csv": {
+      "sha256": "ef11e685030a94962f9709a2acfc712373b5f2473741a33b04676af4c3b55733",
+      "size_bytes": 4889
+    },
+    "summary.json": {
+      "sha256": "9473087cbf6a30c15b1c1d24610e30a13cd57fd5389cc16d7cdbc50d87c798f4",
+      "size_bytes": 64041
+    }
+  },
+  "command": [
+    "/home/vitor/github/personal/IA-PV/src/tetris_ai/cli/evaluate_agents.py",
+    "--agents",
+    "state-goal",
+    "genetic",
+    "q-table",
+    "dqn",
+    "--genetic-model",
+    "reports/genetic_agent/20260724T210834.353261-0300/model.json",
+    "--q-table-checkpoint",
+    "reports/q_table_agent/20260724T212622.843743-0300/checkpoint.pkl",
+    "--dqn-checkpoint",
+    "reports/dqn_agent/20260724T221509.615980-0300/checkpoint.pkl",
+    "--episodes",
+    "12",
+    "--max-pieces",
+    "300",
+    "--seed",
+    "1000000",
+    "--search-depth",
+    "2",
+    "--max-nodes-expanded",
+    "500",
+    "--workers",
+    "0"
+  ],
+  "completed_at": "2026-07-24T22:56:17.116746-03:00",
+  "duration_seconds": 154.18526,
+  "experiment": {
+    "agents": [
+      "state-goal",
+      "genetic",
+      "q-table",
+      "dqn"
+    ],
+    "allow_horizon_transfer": false,
+    "beam_width": null,
+    "environment_config": {
+      "allow_hold": true,
+      "height": 20,
+      "horizon_mode": "finite",
+      "max_pieces": 300,
+      "observation_mode": "featured",
+      "preview_count": 5,
+      "reward": {
+        "aggregate_height_delta_weight": 0.0,
+        "bumpiness_delta_weight": 0.0,
+        "enable_shaping": false,
+        "holes_delta_weight": 0.0,
+        "line_rewards": [
+          0.0,
+          1.0,
+          3.0,
+          5.0,
+          8.0
+        ],
+        "shaping_gamma": 1.0,
+        "shaping_scale": 1.0,
+        "terminal_penalty": 0.0,
+        "truncation_penalty": 0.0
+      },
+      "ruleset_version": "planning-v2",
+      "scoring": {
+        "approximate_t_spin_scores": [
+          400,
+          800,
+          1200,
+          1600,
+          1600
+        ],
+        "back_to_back_multiplier": 1.5,
+        "enable_approximate_t_spins": false,
+        "line_clear_scores": [
+          0,
+          100,
+          300,
+          500,
+          800
+        ]
+      },
+      "width": 10
+    },
+    "environment_config_id": "31a31b91b5ad163c",
+    "episodes": 12,
+    "first_seed": 1000000,
+    "max_nodes_expanded": 500,
+    "search_depth": 2,
+    "search_strategy": "greedy",
+    "seeds": [
+      1000000,
+      1000001,
+      1000002,
+      1000003,
+      1000004,
+      1000005,
+      1000006,
+      1000007,
+      1000008,
+      1000009,
+      1000010,
+      1000011
+    ],
+    "worker_processes": 7,
+    "workers_requested": 0
+  },
+  "measurement_contract": {
+    "decision_clock": "time.perf_counter",
+    "decision_quantile_method": "linear_interpolation_at_(n_minus_1)_times_q",
+    "decision_time_scope": "agent.select_action_only",
+    "primary_metric": "task_return",
+    "task_return_includes_shaping": false
+  },
+  "report_type": "agent_comparison",
+  "run_id": "20260724T225342.931486-0300",
+  "runtime": {
+    "package_version": "not-installed",
+    "platform": {
+      "machine": "x86_64",
+      "release": "7.0.10-arch1-1",
+      "system": "Linux"
+    },
+    "python": {
+      "implementation": "CPython",
+      "version": "3.14.6"
+    },
+    "source_control": {
+      "commit": "519f4e4c9dcc65e9daf800cd9adf421306debed6",
+      "repository_root": "/home/vitor/github/personal/IA-PV",
+      "working_tree_dirty": true
+    },
+    "working_directory": "/home/vitor/github/personal/IA-PV"
+  },
+  "schema_version": 3,
+  "started_at": "2026-07-24T22:53:42.931486-03:00",
+  "visualization": {
+    "backend": "Agg",
+    "formats": [
+      "svg",
+      "png"
+    ],
+    "library": "matplotlib",
+    "png_dpi": 300,
+    "raw_observations_visible": true,
+    "uncertainty": "two_sided_95_percent_student_t_confidence_interval",
+    "version": "3.11.0"
+  }
+}
