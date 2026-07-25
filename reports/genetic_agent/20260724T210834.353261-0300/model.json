@@ -1,0 +1,703 @@
+{
+  "agent": "GeneticAgent",
+  "best_chromosome": {
+    "aggregate_height": 0.002623601279711718,
+    "bumpiness": 0.03435924928556355,
+    "column_transitions": -0.26761246641106684,
+    "hold_retrieve_i": -0.28377737743836456,
+    "hold_store_i": 0.12682178332385638,
+    "holes": -0.6625814815888602,
+    "i_well_match": -0.18335233179261778,
+    "landing_height": -0.00017587506728423982,
+    "lines_cleared": 0.28771533154891105,
+    "max_height": -0.3260662924940819,
+    "row_transitions": -0.28628457736029933,
+    "use_hold": -0.2705716282668272,
+    "wells": 0.1169753360252587
+  },
+  "best_chromosome_id": "93646f0c20cceb9f",
+  "best_fitness": 250.0,
+  "best_mean_lines": 229.0,
+  "best_mean_pieces": 587.25,
+  "best_mean_score": 299637.5,
+  "best_reward_stddev": 22.367067628227762,
+  "best_task_return_stddev": 22.367067628227762,
+  "config": {
+    "crossover_rate": 0.9,
+    "elite_archive_capacity": 4,
+    "elite_count": 2,
+    "elite_memory_alpha": 0.25,
+    "episodes_per_individual": 3,
+    "final_mutation_stddev": 0.06,
+    "frozen_genes": [],
+    "generations": 8,
+    "initial_gene_max": 1.0,
+    "initial_gene_min": -1.0,
+    "lookahead_beam_width": 2,
+    "lookahead_depth": 2,
+    "lookahead_discount": 0.95,
+    "max_pieces": 300,
+    "monitoring_episodes": 5,
+    "mutation_rate": 0.15,
+    "mutation_schedule": "exponential",
+    "mutation_stddev": 0.3,
+    "population_size": 12,
+    "seed": 0,
+    "test_episodes": 10,
+    "test_max_pieces": 600,
+    "tournament_size": 3,
+    "validation_episodes": 8,
+    "validation_max_pieces": 600
+  },
+  "crossover": "arithmetic",
+  "elite_memory_metric": "exponential_moving_average_of_population_percentile",
+  "environment_config": {
+    "allow_hold": true,
+    "height": 20,
+    "horizon_mode": "finite",
+    "max_pieces": 600,
+    "observation_mode": "featured",
+    "preview_count": 5,
+    "reward": {
+      "aggregate_height_delta_weight": 0.0,
+      "bumpiness_delta_weight": 0.0,
+      "enable_shaping": false,
+      "holes_delta_weight": 0.0,
+      "line_rewards": [
+        0.0,
+        1.0,
+        3.0,
+        5.0,
+        8.0
+      ],
+      "shaping_gamma": 1.0,
+      "shaping_scale": 1.0,
+      "terminal_penalty": 0.0,
+      "truncation_penalty": 0.0
+    },
+    "ruleset_version": "planning-v2",
+    "scoring": {
+      "approximate_t_spin_scores": [
+        400,
+        800,
+        1200,
+        1600,
+        1600
+      ],
+      "back_to_back_multiplier": 1.5,
+      "enable_approximate_t_spins": false,
+      "line_clear_scores": [
+        0,
+        100,
+        300,
+        500,
+        800
+      ]
+    },
+    "width": 10
+  },
+  "environment_config_id": "1a3777bc8b24f627",
+  "fitness": "mean_task_return",
+  "fitness_metric": "task_return",
+  "fitness_shaping_included": false,
+  "gene_order": [
+    "lines_cleared",
+    "aggregate_height",
+    "holes",
+    "bumpiness",
+    "max_height",
+    "row_transitions",
+    "column_transitions",
+    "wells",
+    "landing_height",
+    "use_hold",
+    "hold_store_i",
+    "hold_retrieve_i",
+    "i_well_match"
+  ],
+  "history": [
+    {
+      "best_chromosome": {
+        "aggregate_height": 0.3793739457317577,
+        "bumpiness": -0.06457727426900045,
+        "column_transitions": -0.24237431584887476,
+        "hold_retrieve_i": -0.39990858376226773,
+        "hold_store_i": 0.0031571915382502752,
+        "holes": -0.41431724335443065,
+        "i_well_match": -0.3464777327935381,
+        "landing_height": -0.12997386008841855,
+        "lines_cleared": 0.2611063467315331,
+        "max_height": -0.34597506748119783,
+        "row_transitions": -0.2084360804399259,
+        "use_hold": -0.27754603883871776,
+        "wells": 0.12756000958123082
+      },
+      "best_chromosome_id": "0149edd3f2756870",
+      "best_fitness": 122.0,
+      "best_mean_lines": 114.0,
+      "best_mean_pieces": 300.0,
+      "best_mean_score": 75466.66666666667,
+      "elite_chromosome_id": "0149edd3f2756870",
+      "elite_observations": 1,
+      "elite_reputation": 1.0,
+      "generation": 0,
+      "mean_fitness": 13.305555555555555,
+      "monitoring_fitness": 121.2,
+      "monitoring_mean_lines": 114.4,
+      "monitoring_mean_pieces": 300.0,
+      "monitoring_mean_score": 76060.0,
+      "monitoring_seeds": [
+        32,
+        33,
+        34,
+        35,
+        36
+      ],
+      "monitoring_task_return_stddev": 3.63318042491699,
+      "population_diversity": 1.004074362431086,
+      "reproduction_mutation_stddev": 0.3,
+      "training_seeds": [
+        0,
+        1,
+        2
+      ],
+      "worst_fitness": 0.0
+    },
+    {
+      "best_chromosome": {
+        "aggregate_height": -0.025875475654979288,
+        "bumpiness": 0.0035788094972147104,
+        "column_transitions": -0.2565191172699426,
+        "hold_retrieve_i": -0.3452424761698439,
+        "hold_store_i": 0.09022261900854243,
+        "holes": -0.4173601174645713,
+        "i_well_match": -0.35770997193581194,
+        "landing_height": -0.11798348866016842,
+        "lines_cleared": 0.29357888465393317,
+        "max_height": -0.3951987682036141,
+        "row_transitions": -0.36815360483720444,
+        "use_hold": -0.32745053151502856,
+        "wells": 0.07060846625884329
+      },
+      "best_chromosome_id": "aeb3c7f7addaa67f",
+      "best_fitness": 122.33333333333333,
+      "best_mean_lines": 115.0,
+      "best_mean_pieces": 300.0,
+      "best_mean_score": 76633.33333333333,
+      "elite_chromosome_id": "aeb3c7f7addaa67f",
+      "elite_observations": 1,
+      "elite_reputation": 1.0,
+      "generation": 1,
+      "mean_fitness": 37.666666666666664,
+      "monitoring_fitness": 120.6,
+      "monitoring_mean_lines": 112.2,
+      "monitoring_mean_pieces": 300.0,
+      "monitoring_mean_score": 73240.0,
+      "monitoring_seeds": [
+        32,
+        33,
+        34,
+        35,
+        36
+      ],
+      "monitoring_task_return_stddev": 8.35463942968217,
+      "population_diversity": 0.8772129628232682,
+      "reproduction_mutation_stddev": 0.229417347399519,
+      "training_seeds": [
+        3,
+        4,
+        5
+      ],
+      "worst_fitness": 0.3333333333333333
+    },
+    {
+      "best_chromosome": {
+        "aggregate_height": -0.021570798081228477,
+        "bumpiness": 0.0029834341236832855,
+        "column_transitions": -0.21384426537257134,
+        "hold_retrieve_i": -0.2878074916118483,
+        "hold_store_i": 0.07521306749846617,
+        "holes": -0.6527634216291255,
+        "i_well_match": -0.29820087866807876,
+        "landing_height": -0.09835560299420668,
+        "lines_cleared": 0.24473872195518978,
+        "max_height": -0.32945299033488246,
+        "row_transitions": -0.30690709530170657,
+        "use_hold": -0.27297543786571515,
+        "wells": 0.058861950551299405
+      },
+      "best_chromosome_id": "c965db91e8e54dd9",
+      "best_fitness": 129.0,
+      "best_mean_lines": 116.33333333333333,
+      "best_mean_pieces": 300.0,
+      "best_mean_score": 81666.66666666667,
+      "elite_chromosome_id": "c965db91e8e54dd9",
+      "elite_observations": 1,
+      "elite_reputation": 1.0,
+      "generation": 2,
+      "mean_fitness": 87.1111111111111,
+      "monitoring_fitness": 127.6,
+      "monitoring_mean_lines": 115.8,
+      "monitoring_mean_pieces": 300.0,
+      "monitoring_mean_score": 80260.0,
+      "monitoring_seeds": [
+        32,
+        33,
+        34,
+        35,
+        36
+      ],
+      "monitoring_task_return_stddev": 3.1304951684997055,
+      "population_diversity": 0.48830093588997425,
+      "reproduction_mutation_stddev": 0.17544106429277198,
+      "training_seeds": [
+        6,
+        7,
+        8
+      ],
+      "worst_fitness": 14.333333333333334
+    },
+    {
+      "best_chromosome": {
+        "aggregate_height": 0.010917264050213085,
+        "bumpiness": -0.0002625982615623403,
+        "column_transitions": -0.19266048995810445,
+        "hold_retrieve_i": -0.2553390786393983,
+        "hold_store_i": 0.06887074307894585,
+        "holes": -0.5769276252870931,
+        "i_well_match": -0.48825075760197384,
+        "landing_height": -0.09010892661378055,
+        "lines_cleared": 0.21907893186674654,
+        "max_height": -0.29574230055405587,
+        "row_transitions": -0.2772457051294649,
+        "use_hold": -0.24617723265521463,
+        "wells": 0.2013456040619303
+      },
+      "best_chromosome_id": "4127967c0e910c7a",
+      "best_fitness": 131.0,
+      "best_mean_lines": 117.66666666666667,
+      "best_mean_pieces": 300.0,
+      "best_mean_score": 83866.66666666667,
+      "elite_chromosome_id": "4127967c0e910c7a",
+      "elite_observations": 1,
+      "elite_reputation": 1.0,
+      "generation": 3,
+      "mean_fitness": 114.6388888888889,
+      "monitoring_fitness": 121.4,
+      "monitoring_mean_lines": 111.2,
+      "monitoring_mean_pieces": 295.2,
+      "monitoring_mean_score": 74080.0,
+      "monitoring_seeds": [
+        32,
+        33,
+        34,
+        35,
+        36
+      ],
+      "monitoring_task_return_stddev": 13.63084736911099,
+      "population_diversity": 0.1353019324519291,
+      "reproduction_mutation_stddev": 0.13416407864998736,
+      "training_seeds": [
+        9,
+        10,
+        11
+      ],
+      "worst_fitness": 55.0
+    },
+    {
+      "best_chromosome": {
+        "aggregate_height": -0.021938696306822252,
+        "bumpiness": 0.003034317735691789,
+        "column_transitions": -0.21749146124764826,
+        "hold_retrieve_i": -0.29271615864761913,
+        "hold_store_i": 0.07649585518068133,
+        "holes": -0.66389655187519,
+        "i_well_match": 0.06976251239850129,
+        "landing_height": -0.10003309548579249,
+        "lines_cleared": 0.3386325843951251,
+        "max_height": -0.33507193730681867,
+        "row_transitions": -0.31214151339594925,
+        "use_hold": -0.27763113854231064,
+        "wells": 0.05986586366945411
+      },
+      "best_chromosome_id": "7df4b9b4fef5a9ae",
+      "best_fitness": 127.0,
+      "best_mean_lines": 116.66666666666667,
+      "best_mean_pieces": 300.0,
+      "best_mean_score": 80266.66666666667,
+      "elite_chromosome_id": "8046563cb67269cf",
+      "elite_observations": 1,
+      "elite_reputation": 0.9090909090909091,
+      "generation": 4,
+      "mean_fitness": 121.25,
+      "monitoring_fitness": 125.2,
+      "monitoring_mean_lines": 115.0,
+      "monitoring_mean_pieces": 300.0,
+      "monitoring_mean_score": 78100.0,
+      "monitoring_seeds": [
+        32,
+        33,
+        34,
+        35,
+        36
+      ],
+      "monitoring_task_return_stddev": 5.215361924162119,
+      "population_diversity": 0.07775022016930036,
+      "reproduction_mutation_stddev": 0.10259855680060183,
+      "training_seeds": [
+        12,
+        13,
+        14
+      ],
+      "worst_fitness": 108.33333333333333
+    },
+    {
+      "best_chromosome": {
+        "aggregate_height": -0.019678375424631703,
+        "bumpiness": 0.24539038022790047,
+        "column_transitions": -0.20831979052910396,
+        "hold_retrieve_i": -0.2803202550690731,
+        "hold_store_i": 0.07400416678989274,
+        "holes": -0.6357531106193574,
+        "i_well_match": 0.055623251529340785,
+        "landing_height": -0.09583433329683434,
+        "lines_cleared": 0.35996628921195045,
+        "max_height": -0.3209277530058983,
+        "row_transitions": -0.29770751084164077,
+        "use_hold": -0.26592655690709016,
+        "wells": 0.05971511276177501
+      },
+      "best_chromosome_id": "b28e36bcb90bb83e",
+      "best_fitness": 132.0,
+      "best_mean_lines": 115.33333333333333,
+      "best_mean_pieces": 300.0,
+      "best_mean_score": 82600.0,
+      "elite_chromosome_id": "b28e36bcb90bb83e",
+      "elite_observations": 1,
+      "elite_reputation": 1.0,
+      "generation": 5,
+      "mean_fitness": 121.6388888888889,
+      "monitoring_fitness": 119.6,
+      "monitoring_mean_lines": 109.2,
+      "monitoring_mean_pieces": 300.0,
+      "monitoring_mean_score": 70820.0,
+      "monitoring_seeds": [
+        32,
+        33,
+        34,
+        35,
+        36
+      ],
+      "monitoring_task_return_stddev": 4.827007354458868,
+      "population_diversity": 0.0760415431381537,
+      "reproduction_mutation_stddev": 0.07845962916070982,
+      "training_seeds": [
+        15,
+        16,
+        17
+      ],
+      "worst_fitness": 111.33333333333333
+    },
+    {
+      "best_chromosome": {
+        "aggregate_height": 0.02163963075343375,
+        "bumpiness": 0.2440963493916832,
+        "column_transitions": -0.20722124610984585,
+        "hold_retrieve_i": -0.2788420265674555,
+        "hold_store_i": 0.07361391647223259,
+        "holes": -0.6324005581329948,
+        "i_well_match": 0.08054737502255742,
+        "landing_height": -0.1268657886742592,
+        "lines_cleared": 0.3580680588175627,
+        "max_height": -0.3192353867110099,
+        "row_transitions": -0.29613759315030835,
+        "use_hold": -0.2645242315001721,
+        "wells": 0.05940021371304228
+      },
+      "best_chromosome_id": "6f487cc70d35a8f7",
+      "best_fitness": 129.0,
+      "best_mean_lines": 115.33333333333333,
+      "best_mean_pieces": 300.0,
+      "best_mean_score": 81700.0,
+      "elite_chromosome_id": "6f487cc70d35a8f7",
+      "elite_observations": 1,
+      "elite_reputation": 1.0,
+      "generation": 6,
+      "mean_fitness": 119.91666666666667,
+      "monitoring_fitness": 124.2,
+      "monitoring_mean_lines": 113.8,
+      "monitoring_mean_pieces": 300.0,
+      "monitoring_mean_score": 78080.0,
+      "monitoring_seeds": [
+        32,
+        33,
+        34,
+        35,
+        36
+      ],
+      "monitoring_task_return_stddev": 4.8166378315169185,
+      "population_diversity": 0.04771141802184731,
+      "reproduction_mutation_stddev": 0.06,
+      "training_seeds": [
+        18,
+        19,
+        20
+      ],
+      "worst_fitness": 104.0
+    },
+    {
+      "best_chromosome": {
+        "aggregate_height": 0.0026831733349204924,
+        "bumpiness": 0.1521102195770022,
+        "column_transitions": -0.251601359316599,
+        "hold_retrieve_i": -0.2867402746791529,
+        "hold_store_i": 0.14290128773231076,
+        "holes": -0.6503251754907595,
+        "i_well_match": -0.06865819318827078,
+        "landing_height": -0.11751316306246183,
+        "lines_cleared": 0.3186166888020384,
+        "max_height": -0.32825926837989805,
+        "row_transitions": -0.30502148773001375,
+        "use_hold": -0.25176573167999644,
+        "wells": 0.061402901924224755
+      },
+      "best_chromosome_id": "8e713eb4632afee2",
+      "best_fitness": 128.66666666666666,
+      "best_mean_lines": 118.0,
+      "best_mean_pieces": 300.0,
+      "best_mean_score": 82233.33333333333,
+      "elite_chromosome_id": "8e713eb4632afee2",
+      "elite_observations": 1,
+      "elite_reputation": 1.0,
+      "generation": 7,
+      "mean_fitness": 120.8888888888889,
+      "monitoring_fitness": 124.6,
+      "monitoring_mean_lines": 115.4,
+      "monitoring_mean_pieces": 300.0,
+      "monitoring_mean_score": 78140.0,
+      "monitoring_seeds": [
+        32,
+        33,
+        34,
+        35,
+        36
+      ],
+      "monitoring_task_return_stddev": 4.505552130427524,
+      "population_diversity": 0.047713633255720075,
+      "reproduction_mutation_stddev": null,
+      "training_seeds": [
+        21,
+        22,
+        23
+      ],
+      "worst_fitness": 98.0
+    }
+  ],
+  "model_selection": "generation_elites_and_search_archive_on_held_out_validation_seeds",
+  "monitoring_seeds": [
+    32,
+    33,
+    34,
+    35,
+    36
+  ],
+  "policy": "normalized_linear_beam_search",
+  "policy_config": {
+    "beam_width": 2,
+    "discount_factor": 0.95,
+    "search_depth": 2
+  },
+  "schema_version": 6,
+  "test_episode_count": 10,
+  "test_max_pieces": 600,
+  "test_mean_lines": 222.2,
+  "test_mean_pieces": 579.4,
+  "test_mean_score": 285390.0,
+  "test_seeds": [
+    37,
+    38,
+    39,
+    40,
+    41,
+    42,
+    43,
+    44,
+    45,
+    46
+  ],
+  "test_selection_role": "held_out_unbiased_estimate_not_used_for_selection",
+  "test_task_return": 242.3,
+  "test_task_return_stddev": 32.06261235631169,
+  "training_environment_config": {
+    "allow_hold": true,
+    "height": 20,
+    "horizon_mode": "finite",
+    "max_pieces": 300,
+    "observation_mode": "featured",
+    "preview_count": 5,
+    "reward": {
+      "aggregate_height_delta_weight": 0.0,
+      "bumpiness_delta_weight": 0.0,
+      "enable_shaping": false,
+      "holes_delta_weight": 0.0,
+      "line_rewards": [
+        0.0,
+        1.0,
+        3.0,
+        5.0,
+        8.0
+      ],
+      "shaping_gamma": 1.0,
+      "shaping_scale": 1.0,
+      "terminal_penalty": 0.0,
+      "truncation_penalty": 0.0
+    },
+    "ruleset_version": "planning-v2",
+    "scoring": {
+      "approximate_t_spin_scores": [
+        400,
+        800,
+        1200,
+        1600,
+        1600
+      ],
+      "back_to_back_multiplier": 1.5,
+      "enable_approximate_t_spins": false,
+      "line_clear_scores": [
+        0,
+        100,
+        300,
+        500,
+        800
+      ]
+    },
+    "width": 10
+  },
+  "training_environment_config_id": "31a31b91b5ad163c",
+  "training_monitoring_role": "diagnostic_only_not_used_for_selection",
+  "training_seed_batches": [
+    [
+      0,
+      1,
+      2
+    ],
+    [
+      3,
+      4,
+      5
+    ],
+    [
+      6,
+      7,
+      8
+    ],
+    [
+      9,
+      10,
+      11
+    ],
+    [
+      12,
+      13,
+      14
+    ],
+    [
+      15,
+      16,
+      17
+    ],
+    [
+      18,
+      19,
+      20
+    ],
+    [
+      21,
+      22,
+      23
+    ]
+  ],
+  "training_seeds": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23
+  ],
+  "validation_candidate_count": 13,
+  "validation_environment_config": {
+    "allow_hold": true,
+    "height": 20,
+    "horizon_mode": "finite",
+    "max_pieces": 600,
+    "observation_mode": "featured",
+    "preview_count": 5,
+    "reward": {
+      "aggregate_height_delta_weight": 0.0,
+      "bumpiness_delta_weight": 0.0,
+      "enable_shaping": false,
+      "holes_delta_weight": 0.0,
+      "line_rewards": [
+        0.0,
+        1.0,
+        3.0,
+        5.0,
+        8.0
+      ],
+      "shaping_gamma": 1.0,
+      "shaping_scale": 1.0,
+      "terminal_penalty": 0.0,
+      "truncation_penalty": 0.0
+    },
+    "ruleset_version": "planning-v2",
+    "scoring": {
+      "approximate_t_spin_scores": [
+        400,
+        800,
+        1200,
+        1600,
+        1600
+      ],
+      "back_to_back_multiplier": 1.5,
+      "enable_approximate_t_spins": false,
+      "line_clear_scores": [
+        0,
+        100,
+        300,
+        500,
+        800
+      ]
+    },
+    "width": 10
+  },
+  "validation_environment_config_id": "1a3777bc8b24f627",
+  "validation_seeds": [
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31
+  ]
+}

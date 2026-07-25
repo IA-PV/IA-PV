@@ -1,0 +1,154 @@
+{
+  "agent": "QTableAgent",
+  "algorithm": "tabular_q_learning",
+  "artifacts": {
+    "checkpoint.pkl": {
+      "sha256": "59533a4e0806325232229dbd168acc10dfcfb8358763bace0b55e9bb81baa066",
+      "size_bytes": 5472424
+    },
+    "episodes.csv": {
+      "sha256": "d6e548284e0905149b634c9e242cd7b16492494fa0eb816c2106a35ff4cca96f",
+      "size_bytes": 268602
+    },
+    "summary.json": {
+      "sha256": "84b4c60ce21f18e465455ca80ce6a2d49a444f36f02686d39a5434f171cea66d",
+      "size_bytes": 2919
+    },
+    "training.png": {
+      "sha256": "0ba86edbefc062fe7b6fea5fb2160c59a115bd8fe008423ceb6aea2fafe7d626",
+      "size_bytes": 426044
+    },
+    "training.svg": {
+      "sha256": "5356c7552b90bc170aab942bd96e723857d462fc0732db8d83987d6859426fa7",
+      "size_bytes": 1427633
+    }
+  },
+  "command": [
+    "/home/vitor/github/personal/IA-PV/src/tetris_ai/cli/train_q_table_agent.py",
+    "--episodes",
+    "3000",
+    "--max-pieces",
+    "300",
+    "--seed",
+    "0"
+  ],
+  "completed_at": "2026-07-24T21:27:10.572897-03:00",
+  "configuration": {
+    "algorithm": "tabular_q_learning",
+    "alpha": 0.1,
+    "board_width": 10,
+    "epsilon_decay": 0.9999,
+    "epsilon_min": 0.05,
+    "epsilon_start": 1.0,
+    "gamma": 1.0,
+    "max_pieces": 300,
+    "seed": 0,
+    "source_max_pieces": null
+  },
+  "duration_seconds": 47.729154,
+  "experiment": {
+    "benchmark_reward": {
+      "aggregate_height_delta_weight": 0.0,
+      "bumpiness_delta_weight": 0.0,
+      "enable_shaping": false,
+      "holes_delta_weight": 0.0,
+      "line_rewards": [
+        0.0,
+        1.0,
+        3.0,
+        5.0,
+        8.0
+      ],
+      "shaping_gamma": 1.0,
+      "shaping_scale": 1.0,
+      "terminal_penalty": 0.0,
+      "truncation_penalty": 0.0
+    },
+    "environment_config": {
+      "allow_hold": true,
+      "height": 20,
+      "horizon_mode": "finite",
+      "max_pieces": 300,
+      "observation_mode": "featured",
+      "preview_count": 5,
+      "reward": {
+        "aggregate_height_delta_weight": -0.05,
+        "bumpiness_delta_weight": -0.1,
+        "enable_shaping": true,
+        "holes_delta_weight": -0.5,
+        "line_rewards": [
+          0.0,
+          1.0,
+          3.0,
+          5.0,
+          8.0
+        ],
+        "shaping_gamma": 1.0,
+        "shaping_scale": 1.0,
+        "terminal_penalty": 0.0,
+        "truncation_penalty": 0.0
+      },
+      "ruleset_version": "planning-v2",
+      "scoring": {
+        "approximate_t_spin_scores": [
+          400,
+          800,
+          1200,
+          1600,
+          1600
+        ],
+        "back_to_back_multiplier": 1.5,
+        "enable_approximate_t_spins": false,
+        "line_clear_scores": [
+          0,
+          100,
+          300,
+          500,
+          800
+        ]
+      },
+      "width": 10
+    },
+    "environment_config_id": "8e3dc3b7791c09f9",
+    "episodes": 3000,
+    "first_seed": 0,
+    "log_every_episodes": 100,
+    "max_pieces": 300,
+    "selection_metric": "task_return",
+    "training_reward_role": "task_reward_plus_potential_based_shaping"
+  },
+  "report_type": "agent_training",
+  "run_id": "20260724T212622.843743-0300",
+  "runtime": {
+    "package_version": "not-installed",
+    "platform": {
+      "machine": "x86_64",
+      "release": "7.0.10-arch1-1",
+      "system": "Linux"
+    },
+    "python": {
+      "implementation": "CPython",
+      "version": "3.14.6"
+    },
+    "source_control": {
+      "commit": "27f582bc4333843870c3f9d1e7f0145b7c5b4123",
+      "repository_root": "/home/vitor/github/personal/IA-PV",
+      "working_tree_dirty": false
+    },
+    "working_directory": "/home/vitor/github/personal/IA-PV"
+  },
+  "schema_version": 3,
+  "started_at": "2026-07-24T21:26:22.843743-03:00",
+  "visualization": {
+    "backend": "Agg",
+    "formats": [
+      "svg",
+      "png"
+    ],
+    "library": "matplotlib",
+    "png_dpi": 300,
+    "raw_observations_visible": true,
+    "uncertainty": "two_sided_95_percent_student_t_confidence_interval",
+    "version": "3.11.0"
+  }
+}

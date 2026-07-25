@@ -1,0 +1,131 @@
+{
+  "agent": "GeneticAgent",
+  "algorithm": "genetic_algorithm",
+  "artifacts": {
+    "history.csv": {
+      "sha256": "317e4ee74c2b48a8bb920fd3d0bf88652de57ebc9cbc7279d618099443ace303",
+      "size_bytes": 4595
+    },
+    "model.json": {
+      "sha256": "870183cdaaea0ea93ed091017fea43fd246dcb2d399cbea8fcfec9972766f30e",
+      "size_bytes": 18733
+    },
+    "summary.json": {
+      "sha256": "74bf61a803bac206c5dd514291ef64a0799af3974bca7eb7787d463f0c610c99",
+      "size_bytes": 3611
+    },
+    "training.png": {
+      "sha256": "97c03308ab59a0df8ab7924f8b6a2f723597b26d935f7286e7d14f3ea94dbb07",
+      "size_bytes": 566506
+    },
+    "training.svg": {
+      "sha256": "1805994f0afc273c0cdfd94f2c85c9c14e64c1b52856274f0e64f2ff95b2307d",
+      "size_bytes": 64095
+    }
+  },
+  "command": [
+    "/home/vitor/github/personal/IA-PV/src/tetris_ai/cli/train_genetic_agent.py",
+    "--population-size",
+    "12",
+    "--generations",
+    "8",
+    "--episodes-per-individual",
+    "3",
+    "--monitoring-episodes",
+    "5",
+    "--validation-episodes",
+    "8",
+    "--max-pieces",
+    "300",
+    "--validation-max-pieces",
+    "600",
+    "--test-episodes",
+    "10",
+    "--test-max-pieces",
+    "600",
+    "--lookahead-depth",
+    "2",
+    "--lookahead-beam-width",
+    "2",
+    "--mutation-stddev",
+    "0.30",
+    "--final-mutation-stddev",
+    "0.06",
+    "--mutation-schedule",
+    "exponential",
+    "--seed",
+    "0",
+    "--workers",
+    "0"
+  ],
+  "completed_at": "2026-07-24T22:23:16.877509-03:00",
+  "configuration": {
+    "crossover_rate": 0.9,
+    "elite_archive_capacity": 4,
+    "elite_count": 2,
+    "elite_memory_alpha": 0.25,
+    "episodes_per_individual": 3,
+    "final_mutation_stddev": 0.06,
+    "frozen_genes": [],
+    "generations": 8,
+    "initial_gene_max": 1.0,
+    "initial_gene_min": -1.0,
+    "lookahead_beam_width": 2,
+    "lookahead_depth": 2,
+    "lookahead_discount": 0.95,
+    "max_pieces": 300,
+    "monitoring_episodes": 5,
+    "mutation_rate": 0.15,
+    "mutation_schedule": "exponential",
+    "mutation_stddev": 0.3,
+    "population_size": 12,
+    "seed": 0,
+    "test_episodes": 10,
+    "test_max_pieces": 600,
+    "tournament_size": 3,
+    "validation_episodes": 8,
+    "validation_max_pieces": 600
+  },
+  "duration_seconds": 4482.524248,
+  "execution": {
+    "worker_processes": 7,
+    "workers_requested": 0
+  },
+  "fitness_definition": "mean_task_return",
+  "fitness_metric": "task_return",
+  "fitness_shaping_included": false,
+  "report_type": "agent_training",
+  "run_id": "20260724T210834.353261-0300",
+  "runtime": {
+    "package_version": "not-installed",
+    "platform": {
+      "machine": "x86_64",
+      "release": "7.0.10-arch1-1",
+      "system": "Linux"
+    },
+    "python": {
+      "implementation": "CPython",
+      "version": "3.14.6"
+    },
+    "source_control": {
+      "commit": "27f582bc4333843870c3f9d1e7f0145b7c5b4123",
+      "repository_root": "/home/vitor/github/personal/IA-PV",
+      "working_tree_dirty": false
+    },
+    "working_directory": "/home/vitor/github/personal/IA-PV"
+  },
+  "schema_version": 3,
+  "started_at": "2026-07-24T21:08:34.353261-03:00",
+  "visualization": {
+    "backend": "Agg",
+    "formats": [
+      "svg",
+      "png"
+    ],
+    "library": "matplotlib",
+    "png_dpi": 300,
+    "raw_observations_visible": true,
+    "uncertainty": "two_sided_95_percent_student_t_confidence_interval",
+    "version": "3.11.0"
+  }
+}
